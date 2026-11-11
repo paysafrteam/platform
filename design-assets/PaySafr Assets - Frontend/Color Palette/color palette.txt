@@ -1,0 +1,10 @@
+COLOR PALETTE FOR PaySafr in RGBA:
+
+- Dark Green: #112b00ff
+- Light Green: #66ff00ff
+- Dark Grey: #666666ff
+- Light Grey: #ccccccff
+- White: #ffffffff
+- Black: #000000ff
+
+Use according to logo and Brand Identity Design.

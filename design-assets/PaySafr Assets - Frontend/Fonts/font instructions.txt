@@ -1,0 +1,2 @@
+Use "halfre" for headings, emphasis, and any related (font used for logo word-mark).
+Use "degular" for regular purposes as main font.
