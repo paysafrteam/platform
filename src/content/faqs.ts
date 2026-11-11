@@ -44,7 +44,7 @@ export const faqs: { question: string; answer: string; category: FaqCategory }[]
   {
     question: "How much does PaySafr cost?",
     answer:
-      "A small percentage of each order, paid by the seller by default. The example rate is 2%, so a ₦100,000 order leaves ₦98,000 for the seller after a ₦2,000 fee.",
+      "A fee is calculated automatically from the order amount and deducted from the seller's payout when funds are released. The buyer pays the agreed order amount.",
     category: "Money",
   },
   {

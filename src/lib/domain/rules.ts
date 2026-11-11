@@ -6,22 +6,31 @@ export const REVIEW_WINDOW_MIN_HOURS = 24;
 export const REVIEW_WINDOW_MAX_HOURS = 336;
 export const REMINDER_BEFORE_RELEASE_HOURS = 24;
 export const DISPUTE_RESPONSE_HOURS = 48;
-// FINAL FEE TBC. The rate is a provisional setting and must be confirmed before launch.
-export const FEE_RATE = Math.min(
-  0.02,
-  Math.max(0.01, Number(process.env.NEXT_PUBLIC_FEE_RATE ?? 0.02)),
-);
+export const FEE_TIER_THRESHOLD_KOBO = 5_000_000;
+export const LOWER_FEE_RATE = 0.015;
+export const HIGHER_FEE_RATE = 0.02;
 
-export function calcFee(kobo: number, feeRate = FEE_RATE): number {
-  if (!Number.isSafeInteger(kobo) || kobo < 0) throw new RangeError("Amount must be non-negative integer kobo.");
-  if (!Number.isFinite(feeRate) || feeRate < 0.01 || feeRate > 0.02) {
-    throw new RangeError("Fee rate must be between 1% and 2%.");
+export function calcFee(kobo: number, orderTotalKobo = kobo): number {
+  if (
+    !Number.isSafeInteger(kobo) ||
+    kobo < 0 ||
+    !Number.isSafeInteger(orderTotalKobo) ||
+    orderTotalKobo < 0
+  ) {
+    throw new RangeError("Amounts must be non-negative integer kobo.");
   }
+  const feeRate =
+    orderTotalKobo > FEE_TIER_THRESHOLD_KOBO
+      ? HIGHER_FEE_RATE
+      : LOWER_FEE_RATE;
   return Math.floor(kobo * feeRate + 0.5);
 }
 
-export function calcSellerReceives(kobo: number, feeRate = FEE_RATE): number {
-  return kobo - calcFee(kobo, feeRate);
+export function calcSellerReceives(
+  kobo: number,
+  orderTotalKobo = kobo,
+): number {
+  return kobo - calcFee(kobo, orderTotalKobo);
 }
 
 type Entity = "order" | "milestone" | "dispute";

@@ -266,15 +266,16 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
   }
 
   const isAdmin = page === "admin-sign-in";
+  const isFormOnlyAuth = page === "sign-in" || page === "get-started";
   return (
     <main
       className={
         isAdmin
-          ? "min-h-screen bg-[var(--ps-green-900)] px-4 py-10 text-white"
-          : "min-h-screen bg-white"
+          ? "relative min-h-screen bg-[var(--ps-green-900)] px-4 py-10 text-white"
+          : "relative min-h-screen bg-white"
       }
     >
-      {!isAdmin ? (
+      {!isAdmin && !isFormOnlyAuth ? (
         <aside className="relative hidden min-h-screen overflow-hidden bg-[var(--ps-green-900)] p-10 text-white lg:flex lg:w-[45%] lg:flex-col lg:justify-between">
           <div className="absolute -top-20 -right-20 size-96 rounded-full bg-[var(--ps-green-400)]/10 blur-3xl" />
           <div className="relative">
@@ -321,15 +322,17 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
         className={
           isAdmin
             ? "mx-auto max-w-md pt-12"
-            : "mx-auto flex min-h-screen max-w-7xl items-center lg:ml-[45%] lg:max-w-none lg:px-14"
+            : isFormOnlyAuth
+              ? "mx-auto flex min-h-screen w-full max-w-md items-center px-5 py-12"
+              : "mx-auto flex min-h-screen max-w-7xl items-center lg:ml-[45%] lg:max-w-none lg:px-14"
         }
       >
         <div className="w-full px-5 py-8 sm:px-8 lg:max-w-xl">
-          {!isAdmin ? (
+          {!isAdmin && !isFormOnlyAuth ? (
             <div className="mb-9 lg:hidden">
               <Logo />
             </div>
-          ) : (
+          ) : isAdmin ? (
             <div className="mb-6 flex items-center justify-between">
               <span className="rounded-full bg-white/10 px-3 py-1 text-xs">
                 Admin
@@ -338,13 +341,17 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
                 SANDBOX
               </span>
             </div>
-          )}
-          <p className="text-xs tracking-[0.12em] text-[var(--ps-grey-600)] uppercase">
-            {isAdmin ? "PaySafr operations" : "Your PaySafr account"}
-          </p>
-          <h1 className="font-display mt-2 text-3xl sm:text-4xl">
-            {title[page]}
-          </h1>
+          ) : null}
+          {!isFormOnlyAuth ? (
+            <>
+              <p className="text-xs tracking-[0.12em] text-[var(--ps-grey-600)] uppercase">
+                {isAdmin ? "PaySafr operations" : "Your PaySafr account"}
+              </p>
+              <h1 className="font-display mt-2 text-3xl sm:text-4xl">
+                {title[page]}
+              </h1>
+            </>
+          ) : null}
           {page === "onboarding" ? (
             <Onboarding
               {...{
@@ -367,7 +374,17 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
               }}
             />
           ) : (
-            <form onSubmit={submit} className="mt-7 space-y-4">
+            <form
+              onSubmit={submit}
+              aria-label={
+                isFormOnlyAuth
+                  ? page === "sign-in"
+                    ? "Sign in"
+                    : "Create account"
+                  : undefined
+              }
+              className={isFormOnlyAuth ? "space-y-5" : "mt-7 space-y-4"}
+            >
               {page === "get-started" ? (
                 <>
                   <label className="block text-sm">
@@ -553,7 +570,7 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
                 disabled={
                   busy || (page === "verify-email" && code.length !== 6)
                 }
-                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--ps-green-400)] px-5 text-[var(--ps-green-900)] disabled:opacity-50"
+                className="btn-primary w-full disabled:opacity-50"
               >
                 {busy
                   ? "Please wait…"
@@ -589,9 +606,6 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
                   <a href="/get-started" className="underline">
                     Get started
                   </a>
-                  <span className="mt-2 block text-xs text-[var(--ps-grey-600)]">
-                    Demo: tolu@example.test · demo1234
-                  </span>
                 </p>
               ) : null}
               {page === "get-started" ? (
@@ -609,21 +623,19 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
                   </a>
                 </p>
               ) : null}
-              <ApiPlaceholder
-                endpoint={
-                  page === "sign-in"
-                    ? "POST /api/auth/sign-in"
-                    : page === "get-started"
-                      ? "POST /api/auth/sign-up"
-                      : page === "verify-email"
-                        ? "POST /api/auth/verify-email"
-                        : page === "forgot-password"
-                          ? "POST /api/auth/forgot-password"
-                          : page === "reset-password"
-                            ? "POST /api/auth/reset-password"
-                            : "POST /api/admin/auth/sign-in"
-                }
-              />
+              {!isFormOnlyAuth ? (
+                <ApiPlaceholder
+                  endpoint={
+                    page === "verify-email"
+                      ? "POST /api/auth/verify-email"
+                      : page === "forgot-password"
+                        ? "POST /api/auth/forgot-password"
+                        : page === "reset-password"
+                          ? "POST /api/auth/reset-password"
+                          : "POST /api/admin/auth/sign-in"
+                  }
+                />
+              ) : null}
             </form>
           )}
           {page === "forgot-password" ? (

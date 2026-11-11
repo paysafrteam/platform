@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import type { Order, Receipt } from "@/lib/domain/types";
 import { getPublicReceipt } from "@/lib/api";
 import { ReceiptTemplate } from "@/components/share/receipt-template";
@@ -37,12 +36,6 @@ export function PublicReceipt({ number }: { number: string }) {
   return (
     <main className="min-h-screen bg-[var(--ps-grey-200)]/15 px-4 py-8 sm:py-12">
       <div className="mx-auto max-w-2xl">
-        <Link
-          href={`/pay/${data.order.token}`}
-          className="mb-5 inline-flex min-h-11 items-center text-sm underline"
-        >
-          Back to order
-        </Link>
         <ReceiptTemplate
           order={data.order}
           receipt={data.receipt}

@@ -1173,26 +1173,17 @@ function ReceiptList({ store }: { store: AppStore }) {
 
 function Income({ store }: { store: AppStore }) {
   const rows = store.ledger.filter(
-    (entry) =>
-      entry.type === "release" ||
-      entry.type === "fee" ||
-      entry.type === "refund",
+    (entry) => entry.type === "release" || entry.type === "refund",
   );
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         {[
           [
             "Gross released",
             rows
               .filter((entry) => entry.type === "release")
               .reduce((sum, entry) => sum + entry.amountKobo, 0),
-          ],
-          [
-            "Fees",
-            rows
-              .filter((entry) => entry.type === "fee")
-              .reduce((sum, entry) => sum + Math.abs(entry.amountKobo), 0),
           ],
           ["Transactions", rows.length],
         ].map(([label, value]) => (

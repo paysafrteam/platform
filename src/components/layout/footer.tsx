@@ -5,7 +5,7 @@ import { SafrPills } from "@/components/brand/safr-pills";
 import { SocialLinks } from "@/components/brand/social-links";
 
 const columns: { title: string; items: [string, string][] }[] = [
-  { title: "Product", items: [["How it works", "/how-it-works"], ["Pricing", "/pricing"], ["FAQs", "/faqs"], ["Security", "/security"]] },
+  { title: "Product", items: [["How it works", "/how-it-works"], ["FAQs", "/faqs"], ["Security", "/security"]] },
   { title: "Company", items: [["Contact", "/contact"]] },
   { title: "Legal", items: [["Terms", "/terms"], ["Privacy", "/privacy"]] },
 ];

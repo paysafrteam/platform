@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="120"
+   height="120"
+   viewBox="0 0 120 120"
+   version="1.1"
+   id="svg1"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#505050"
+     inkscape:document-units="px"
+     showgrid="false"
+     showguides="true">
+    <inkscape:grid
+       id="grid1"
+       units="px"
+       originx="0"
+       originy="0"
+       spacingx="1"
+       spacingy="1"
+       empcolor="#0099e5"
+       empopacity="0.30196078"
+       color="#0099e5"
+       opacity="0.14901961"
+       empspacing="5"
+       enabled="true"
+       visible="false" />
+    <sodipodi:guide
+       position="55,100"
+       orientation="0,-1"
+       id="guide1"
+       inkscape:locked="false" />
+    <sodipodi:guide
+       position="62.835065,20"
+       orientation="0,-1"
+       id="guide2"
+       inkscape:locked="false" />
+    <sodipodi:guide
+       position="20,75"
+       orientation="1,0"
+       id="guide3"
+       inkscape:locked="false" />
+    <sodipodi:guide
+       position="100,55"
+       orientation="1,0"
+       id="guide4"
+       inkscape:locked="false" />
+    <inkscape:page
+       x="0"
+       y="0"
+       width="120"
+       height="120"
+       id="page2"
+       margin="0"
+       bleed="0" />
+  </sodipodi:namedview>
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <path
+       d="M 44.4628,58.080979 31.91174,45.387306 44.4628,32.693673 57.013897,20 H 82.116058 L 69.564957,32.693673 57.013897,45.387306 Z"
+       style="display:inline;fill:#66ff00;fill-opacity:1;stroke-width:0"
+       id="path58" />
+    <rect
+       style="display:inline;fill:#ffffff;fill-opacity:1;stroke-width:0"
+       id="rect58"
+       width="17.851009"
+       height="17.851009"
+       x="-9.2204456"
+       y="75.157089"
+       transform="matrix(0.7031021,-0.71108891,0.7031021,0.71108891,0,0)" />
+    <path
+       d="M 35.706723,100 H 60.80888 L 73.359981,87.306373 79.635524,93.653183 92.186585,80.959514 85.911036,74.612698 79.635524,68.265881 73.359981,61.919064 60.80888,74.612698 48.257784,87.306373 Z"
+       style="display:inline;fill:#66ff00;fill-opacity:1;stroke-width:0"
+       id="path59" />
+  </g>
+</svg>

@@ -39,9 +39,12 @@ export function SocialLinks({ onDark = false }: { onDark?: boolean }) {
   return (
     <div className={`flex flex-wrap gap-x-5 gap-y-3 text-sm ${text}`}>
       {items.map((item) => (
-        <span key={item.label} className="inline-flex items-center gap-2">
+        <span
+          key={item.label}
+          className="inline-flex max-w-full items-center gap-2"
+        >
           {item.icon}
-          <span>
+          <span className="min-w-0 break-all">
             <span className="sr-only">{item.label}: </span>
             {item.value}
           </span>

@@ -47,6 +47,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icon.png", type: "image/png" },
+    ],
+  },
   title: {
     default: "PaySafr | Work Delivered, Payments Secured",
     template: "%s | PaySafr",
@@ -75,7 +81,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full">
         <Providers>
-          <DialogProvider>{children}</DialogProvider>
+          <DialogProvider>
+            {children}
+          </DialogProvider>
         </Providers>
       </body>
     </html>

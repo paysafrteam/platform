@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Check, FilePlus2, Link2, LockKeyhole, Upload, X } from "lucide-react";
+import { ArrowRight, Check, FilePlus2, Link2, LockKeyhole, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -75,7 +75,7 @@ export function DisputeFlow({ order, milestoneId }: { order: Order; milestoneId?
   return (
     <main className="min-h-screen bg-[var(--ps-grey-200)]/15">
       <header className="border-b border-[var(--ps-grey-200)] bg-white">
-        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-4 sm:px-6"><Link href={`/pay/${order.token}`} className="inline-flex items-center gap-2 text-sm"><ArrowLeft size={17} /> Back to order</Link><span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--ps-green-400)]/20 px-3 py-1.5 text-xs"><LockKeyhole size={14} /> Funds stay held</span></div>
+        <div className="mx-auto flex h-16 max-w-3xl items-center justify-end px-4 sm:px-6"><span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--ps-green-400)]/20 px-3 py-1.5 text-xs"><LockKeyhole size={14} /> Funds stay held</span></div>
       </header>
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--ps-grey-600)]">Dispute · {step + 1} of 4</p>

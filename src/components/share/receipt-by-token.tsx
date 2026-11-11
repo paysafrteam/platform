@@ -56,12 +56,6 @@ export function ReceiptByToken({ token }: { token: string }) {
   return (
     <main className="min-h-screen bg-[var(--ps-grey-200)]/15 px-4 py-8 sm:py-12">
       <div className="mx-auto max-w-2xl">
-        <Link
-          href={`/pay/${token}`}
-          className="mb-5 inline-flex min-h-11 items-center text-sm underline"
-        >
-          Back to order
-        </Link>
         <ReceiptTemplate
           order={data.order}
           receipt={data.receipt}

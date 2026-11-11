@@ -35,10 +35,12 @@ export function PublicInvoice({ token }: { token: string }) {
   if (!order) return <InvalidPaymentLink />;
   return (
     <main className="min-h-screen bg-[var(--ps-grey-200)]/15 px-4 py-8 sm:py-12">
-      <InvoiceTemplate
-        order={order}
-        publicUrl={`/i/${encodeURIComponent(token)}`}
-      />
+      <div className="mx-auto max-w-2xl">
+        <InvoiceTemplate
+          order={order}
+          publicUrl={`/i/${encodeURIComponent(token)}`}
+        />
+      </div>
     </main>
   );
 }

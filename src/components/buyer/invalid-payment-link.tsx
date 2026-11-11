@@ -4,7 +4,7 @@ import { Logo } from "@/components/brand/logo";
 
 export function InvalidPaymentLink() {
   return (
-    <main className="flex min-h-screen flex-col bg-[var(--ps-grey-200)]/15">
+    <main className="relative flex min-h-screen flex-col bg-[var(--ps-grey-200)]/15">
       <header className="border-b border-[var(--ps-grey-200)] bg-white px-5 py-4">
         <div className="mx-auto max-w-5xl"><Logo /></div>
       </header>

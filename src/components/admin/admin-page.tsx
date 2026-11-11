@@ -30,7 +30,7 @@ export function AdminPage({ page, recordId }: { page: AdminPageName; recordId?: 
   const [reason, setReason] = useState("");
   const [splitAmount, setSplitAmount] = useState("");
   const [fastForward, setFastForward] = useState(false);
-  const [settings, setSettings] = useState({ fee: "2", review: "72", expiry: "48", response: "48" });
+  const [settings, setSettings] = useState({ review: "72", expiry: "48", response: "48" });
   const router = useRouter();
   const now = useCurrentTime(60_000);
   const dialog = useStatusDialog();
@@ -152,16 +152,15 @@ function AuditLog({ store, search, setSearch }: { store: AppStore; search: strin
   return <section className="surface-card p-5"><label className="flex min-h-11 items-center gap-2 rounded-xl border px-3"><Search size={16} /><span className="sr-only">Search audit log</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Filter by actor or action" className="w-full bg-transparent text-sm outline-none" /></label><div className="mt-4 space-y-3">{rows.map((entry) => <article key={entry.id} className="rounded-xl bg-[var(--ps-grey-200)]/20 p-4"><p className="text-sm">{entry.actor} · {entry.action}</p><p className="mt-1 text-xs text-[var(--ps-grey-600)]">Target: {entry.target} · {formatLagosDate(entry.createdAt)}</p>{entry.before || entry.after ? <p className="mt-2 text-xs">Before: {entry.before ?? "—"} → After: {entry.after ?? "—"}</p> : null}</article>)}</div></section>;
 }
 
-type AdminSettingKey = "fee" | "review" | "expiry" | "response";
-type AdminSettingsState = { fee: string; review: string; expiry: string; response: string };
+type AdminSettingKey = "review" | "expiry" | "response";
+type AdminSettingsState = { review: string; expiry: string; response: string };
 
 function AdminSettings({ settings, setSettings, onSave }: { settings: AdminSettingsState; setSettings: (v: AdminSettingsState) => void; onSave: () => void }) {
   const fields: Array<{ key: AdminSettingKey; label: string; min: number; max: number; hint: string }> = [
-    { key: "fee", label: "Fee rate (%)", min: 1, max: 2, hint: "1 to 2" },
     { key: "review", label: "Default review window (hours)", min: 24, max: 336, hint: "24 to 336" },
     { key: "expiry", label: "Unpaid order expiry (hours)", min: 1, max: 168, hint: "1 to 168" },
     { key: "response", label: "Dispute response time (hours)", min: 24, max: 120, hint: "24 to 120" },
   ];
 
-  return <section className="surface-card max-w-2xl space-y-4 p-5 sm:p-7">{fields.map(({ key, label, min, max, hint }) => <label key={key} className="block text-sm">{label}<input type="number" min={min} max={max} value={settings[key]} onChange={(event) => setSettings({ ...settings, [key]: event.target.value })} className="mt-2 h-11 w-full rounded-xl border px-3" /><span className="mt-1 block text-xs text-[var(--ps-grey-600)]">Allowed: {hint}</span></label>)}<button type="button" onClick={onSave} className="min-h-11 rounded-full bg-[var(--ps-green-400)] px-5">Save settings</button><ApiPlaceholder endpoint="PUT /api/admin/settings" /></section>;
+  return <section className="surface-card max-w-2xl space-y-4 p-5 sm:p-7"><div className="rounded-xl bg-[var(--ps-green-400)]/15 p-4 text-sm"><h2 className="font-medium">Automatic fee tiers</h2><p className="mt-1 text-[var(--ps-grey-600)]">Orders up to ₦50,000 are charged 1.5%. Orders above ₦50,000 are charged 2%.</p></div>{fields.map(({ key, label, min, max, hint }) => <label key={key} className="block text-sm">{label}<input type="number" min={min} max={max} value={settings[key]} onChange={(event) => setSettings({ ...settings, [key]: event.target.value })} className="mt-2 h-11 w-full rounded-xl border px-3" /><span className="mt-1 block text-xs text-[var(--ps-grey-600)]">Allowed: {hint}</span></label>)}<button type="button" onClick={onSave} className="min-h-11 rounded-full bg-[var(--ps-green-400)] px-5">Save settings</button><ApiPlaceholder endpoint="PUT /api/admin/settings" /></section>;
 }

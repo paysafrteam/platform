@@ -99,14 +99,17 @@ export function confirmMilestone(
           );
         }
         milestone.status = "released";
-        const fee = calcFee(milestone.amountKobo);
+        const fee = calcFee(milestone.amountKobo, order.totalKobo);
         store.ledger.push(
           {
             id: `led-${Date.now()}-release`,
             orderId: order.id,
             milestoneId,
             type: "release",
-            amountKobo: calcSellerReceives(milestone.amountKobo),
+            amountKobo: calcSellerReceives(
+              milestone.amountKobo,
+              order.totalKobo,
+            ),
             pagaReference: `MOCK-RELEASE-${Date.now()}`,
             createdAt: new Date().toISOString(),
           },
@@ -452,7 +455,10 @@ export function resolveDispute(
               orderId: order.id,
               milestoneId: milestone.id,
               type: "release",
-              amountKobo: calcSellerReceives(milestone.amountKobo),
+              amountKobo: calcSellerReceives(
+                milestone.amountKobo,
+                order.totalKobo,
+              ),
               pagaReference: `MOCK-RELEASE-${Date.now()}`,
               createdAt: now,
             },
@@ -461,7 +467,7 @@ export function resolveDispute(
               orderId: order.id,
               milestoneId: milestone.id,
               type: "fee",
-              amountKobo: calcFee(milestone.amountKobo),
+              amountKobo: calcFee(milestone.amountKobo, order.totalKobo),
               pagaReference: `MOCK-FEE-${Date.now()}`,
               createdAt: now,
             },
@@ -491,7 +497,8 @@ export function resolveDispute(
                 orderId: order.id,
                 milestoneId: milestone.id,
                 type: "release",
-                amountKobo: sellerShare - calcFee(sellerShare),
+                amountKobo:
+                  sellerShare - calcFee(sellerShare, order.totalKobo),
                 pagaReference: `MOCK-RELEASE-${Date.now()}`,
                 createdAt: now,
               },
@@ -500,7 +507,7 @@ export function resolveDispute(
                 orderId: order.id,
                 milestoneId: milestone.id,
                 type: "fee",
-                amountKobo: calcFee(sellerShare),
+                amountKobo: calcFee(sellerShare, order.totalKobo),
                 pagaReference: `MOCK-FEE-${Date.now()}`,
                 createdAt: now,
               },

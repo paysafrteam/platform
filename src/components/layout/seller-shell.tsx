@@ -16,6 +16,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/brand/logo";
 import { PoweredByPaga } from "@/components/brand/powered-by-paga";
+import { BackButton } from "@/components/ui/back-button";
 
 const links = [
   { href: "/dashboard", label: "Dashboard", icon: Home },
@@ -54,7 +55,7 @@ export function SellerShell({ children }: { children: React.ReactNode }) {
         </nav>
         <Link
           href="/orders/new"
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[var(--ps-green-400)] text-sm"
+          className="btn-primary w-full text-sm"
         >
           <Plus size={18} /> Create order
         </Link>
@@ -67,12 +68,15 @@ export function SellerShell({ children }: { children: React.ReactNode }) {
       </aside>
       <div className="min-h-screen lg:pl-64">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-[var(--ps-grey-200)] bg-white/95 px-4 backdrop-blur sm:px-7">
-          <div className="lg:hidden">
-            <Logo />
+          <div className="flex items-center gap-3">
+            <BackButton />
+            <div className="lg:hidden">
+              <Logo />
+            </div>
+            <p className="hidden text-sm text-[var(--ps-grey-600)] lg:block">
+              Seller workspace · Demo mode
+            </p>
           </div>
-          <p className="hidden text-sm text-[var(--ps-grey-600)] lg:block">
-            Seller workspace · Demo mode
-          </p>
           <Link
             href="/notifications"
             className="flex size-11 items-center justify-center rounded-full border border-[var(--ps-grey-200)]"

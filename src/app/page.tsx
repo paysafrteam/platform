@@ -7,7 +7,6 @@ import {
   BellRing,
   BookOpenCheck,
   Check,
-  ChevronRight,
   CircleHelp,
   Clock3,
   FileCheck2,
@@ -20,12 +19,12 @@ import {
   Smartphone,
   Wallet,
 } from "lucide-react";
-import { FeeCalculator } from "@/components/marketing/fee-calculator";
 import { FaqList } from "@/components/marketing/faq-list";
 import { MarketingShell } from "@/components/layout/marketing-shell";
 import { Logo } from "@/components/brand/logo";
 import { PoweredByPaga } from "@/components/brand/powered-by-paga";
 import { SafrPills } from "@/components/brand/safr-pills";
+import { ScrollReveal } from "@/components/ui/scroll-reveal";
 import { formatNaira } from "@/lib/format/money";
 
 const problems = [
@@ -69,7 +68,7 @@ export default function Home() {
   return (
     <MarketingShell>
     <main>
-      <section className="mx-auto grid max-w-7xl gap-10 px-4 pt-12 pb-16 sm:px-6 md:grid-cols-[1.05fr_0.95fr] md:items-center md:px-8 md:pt-20 md:pb-24">
+      <ScrollReveal as="section" className="mx-auto grid max-w-7xl gap-10 px-4 pt-12 pb-16 sm:px-6 md:grid-cols-[1.05fr_0.95fr] md:items-center md:px-8 md:pt-20 md:pb-24">
         <div className="relative z-10">
           <Tag><ShieldCheck size={14} /> Escrow for freelancers and online sellers</Tag>
           <h1 className="font-display mt-6 max-w-3xl text-[clamp(2.5rem,7vw,4.75rem)] leading-[1.02] tracking-[-0.03em]">Work delivered.<br className="hidden sm:block" /> Payments secured.</h1>
@@ -77,10 +76,10 @@ export default function Home() {
             Get paid without chasing. Pay without worrying. PaySafr holds the money safely until the work is done.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <Link href="/get-started" className="inline-flex min-h-14 items-center gap-3 rounded-full bg-[var(--ps-green-400)] px-6 text-[var(--ps-green-900)]">
+            <Link href="/get-started" className="btn-primary min-h-14 gap-3 px-6">
               Get Started <span className="flex size-8 items-center justify-center rounded-full bg-[var(--ps-green-900)] text-[var(--ps-green-400)]"><ArrowRight size={17} /></span>
             </Link>
-            <Link href="/how-it-works" className="inline-flex min-h-14 items-center rounded-full border border-[var(--ps-green-900)] px-6">See how it works</Link>
+            <Link href="/how-it-works" className="btn-secondary min-h-14 px-6">See how it works</Link>
           </div>
           <div className="mt-7 flex flex-wrap gap-x-5 gap-y-3 text-sm text-[var(--ps-grey-600)]">
             <span className="inline-flex items-center gap-2"><Check size={16} /> No signup for buyers</span>
@@ -114,9 +113,9 @@ export default function Home() {
           </div>
           <div className="absolute right-8 bottom-5"><SafrPills /></div>
         </div>
-      </section>
+      </ScrollReveal>
 
-      <section className="border-y border-[var(--ps-grey-200)] bg-[var(--ps-grey-200)]/15 py-6">
+      <ScrollReveal as="section" className="border-y border-[var(--ps-grey-200)] bg-[var(--ps-grey-200)]/15 py-6">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-8 gap-y-4 px-4 sm:px-6 md:justify-between md:px-8">
           <p className="text-sm text-[var(--ps-grey-600)]">Share your link on</p>
           <span className="inline-flex items-center gap-2 text-sm"><MessageCircle size={18} /> WhatsApp</span>
@@ -124,31 +123,31 @@ export default function Home() {
           <span className="inline-flex items-center gap-2 text-sm"><Mail size={18} /> Email</span>
           <span className="inline-flex items-center gap-2 text-sm"><MessageSquare size={18} /> SMS</span>
         </div>
-      </section>
+      </ScrollReveal>
 
-      <section className="px-4 py-16 sm:px-6 md:px-8 md:py-24">
+      <ScrollReveal as="section" className="px-4 py-16 sm:px-6 md:px-8 md:py-24">
         <SectionHeading tag="The problem" title="Trust shouldn't be a gamble." copy="Online deals work better when everyone knows what happens next." />
         <div className="mx-auto mt-10 grid max-w-7xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {problems.map((item, index) => (
-            <article key={item.title} className="surface-card p-6">
+            <ScrollReveal as="article" key={item.title} delay={Math.min(index, 3) * 70} className="surface-card p-6">
               <span className="flex size-11 items-center justify-center rounded-2xl bg-[var(--ps-green-400)]/20">{item.icon}</span>
               <span className="mt-5 block text-xs text-[var(--ps-grey-600)]">0{index + 1}</span>
               <h3 className="mt-2 text-xl leading-tight">{item.title}</h3>
               <p className="mt-3 text-sm leading-6 text-[var(--ps-grey-600)]">{item.copy}</p>
-            </article>
+            </ScrollReveal>
           ))}
         </div>
-      </section>
+      </ScrollReveal>
 
-      <section className="bg-[var(--ps-grey-200)]/20 px-4 py-16 sm:px-6 md:px-8 md:py-24">
+      <ScrollReveal as="section" className="bg-[var(--ps-grey-200)]/20 px-4 py-16 sm:px-6 md:px-8 md:py-24">
         <SectionHeading tag="How it works" title="Three steps. No signup for buyers." copy="A clear order page keeps the deal moving from payment to delivery." />
         <div className="mx-auto mt-10 grid max-w-7xl gap-4 md:grid-cols-3">
           {[
             ["01", "Create and share", "Set the amount, deadline and delivery steps. Send your payment link."],
             ["02", "Buyer pays, money is held", "The buyer transfers from any bank. We wait for bank confirmation."],
             ["03", "Deliver and get paid", "The buyer confirms delivery, or the money releases when review time ends."],
-          ].map(([number, title, copy]) => (
-            <article key={number} className="surface-card p-6 md:p-8">
+          ].map(([number, title, copy], index) => (
+            <ScrollReveal as="article" key={number} delay={index * 70} className="surface-card p-6 md:p-8">
               <span className="flex size-10 items-center justify-center rounded-full bg-[var(--ps-green-900)] text-sm text-white">{number}</span>
               <div className="mt-8 rounded-2xl bg-[var(--ps-grey-200)]/30 p-4">
                 {number === "01" ? <div className="flex items-center justify-between"><span className="text-sm">Order link</span><ArrowRight size={18} /></div> : null}
@@ -156,28 +155,24 @@ export default function Home() {
                 {number === "03" ? <div className="flex items-center gap-3"><ShieldCheck className="text-[var(--ps-green-900)]" /><span className="text-sm">Funds released safely</span></div> : null}
               </div>
               <h3 className="mt-5 text-xl">{title}</h3><p className="mt-2 text-sm leading-6 text-[var(--ps-grey-600)]">{copy}</p>
-            </article>
+            </ScrollReveal>
           ))}
         </div>
-        <div className="mx-auto mt-6 flex max-w-7xl flex-wrap items-center justify-between gap-4 rounded-3xl bg-white p-5">
-          <div><p className="text-sm text-[var(--ps-grey-600)]">Choose your example</p><div className="mt-2 flex gap-2"><span className="rounded-full bg-[var(--ps-green-400)] px-4 py-1.5 text-sm">Freelancer · Logo project</span><span className="rounded-full border border-[var(--ps-grey-200)] px-4 py-1.5 text-sm">Vendor · Shoes</span></div></div>
-          <p className="money text-xl">{formatNaira(15_000_000)} · 2 milestones</p>
-        </div>
-      </section>
+      </ScrollReveal>
 
-      <section className="px-4 py-16 sm:px-6 md:px-8 md:py-24">
+      <ScrollReveal as="section" className="px-4 py-16 sm:px-6 md:px-8 md:py-24">
         <SectionHeading tag="Built for real work" title="Everything for a clearer deal." copy="Thoughtful tools for payment, delivery and the moments in between." />
         <div className="mx-auto mt-10 grid max-w-7xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {featureCards.map((item, index) => (
-            <article key={item.title} className={`surface-card p-6 ${index === 0 || index === 4 ? "lg:col-span-2" : ""} ${index === 2 ? "bg-[var(--ps-green-900)] text-white" : ""}`}>
-              <span className={`flex size-11 items-center justify-center rounded-2xl ${index === 2 ? "bg-white/10" : "bg-[var(--ps-green-400)]/20"}`}>{item.icon}</span>
-              <h3 className="mt-5 text-xl">{item.title}</h3><p className={`mt-2 max-w-md text-sm leading-6 ${index === 2 ? "text-white/70" : "text-[var(--ps-grey-600)]"}`}>{item.copy}</p>
-            </article>
+            <ScrollReveal as="article" key={item.title} delay={Math.min(index, 3) * 70} className={`surface-card p-6 ${index === 0 || index === 4 ? "lg:col-span-2" : ""}`}>
+              <span className="flex size-11 items-center justify-center rounded-2xl bg-[var(--ps-green-400)]/20">{item.icon}</span>
+              <h3 className="mt-5 text-xl">{item.title}</h3><p className="mt-2 max-w-md text-sm leading-6 text-[var(--ps-grey-600)]">{item.copy}</p>
+            </ScrollReveal>
           ))}
         </div>
-      </section>
+      </ScrollReveal>
 
-      <section className="px-4 pb-16 sm:px-6 md:px-8 md:pb-24">
+      <ScrollReveal as="section" className="px-4 pb-16 sm:px-6 md:px-8 md:pb-24">
         <div className="brand-glow mx-auto grid max-w-7xl gap-8 overflow-hidden rounded-[32px] p-7 text-white sm:p-10 md:grid-cols-[0.7fr_1.3fr] md:items-center md:p-14">
           <div className="flex justify-center">
             <div className="relative flex size-48 items-center justify-center rounded-full border-[10px] border-[var(--ps-green-400)]/25">
@@ -192,9 +187,9 @@ export default function Home() {
             <div className="mt-6 flex flex-wrap gap-2 text-xs"><span className="rounded-full border border-white/20 px-3 py-1">New</span><span className="rounded-full border border-white/20 px-3 py-1">Rising</span><span className="rounded-full bg-[var(--ps-green-400)] px-3 py-1 text-[var(--ps-green-900)]">Trusted</span><span className="rounded-full border border-white/20 px-3 py-1">Verified</span></div>
           </div>
         </div>
-      </section>
+      </ScrollReveal>
 
-      <section className="bg-[var(--ps-grey-200)]/20 px-4 py-16 sm:px-6 md:px-8 md:py-24">
+      <ScrollReveal as="section" className="bg-[var(--ps-grey-200)]/20 px-4 py-16 sm:px-6 md:px-8 md:py-24">
         <div className="mx-auto grid max-w-7xl gap-10 md:grid-cols-[0.8fr_1.2fr] md:items-center">
           <div>
             <Tag>Our promise</Tag><h2 className="font-display mt-5 text-4xl leading-tight">Security in plain words.</h2>
@@ -210,35 +205,33 @@ export default function Home() {
             ].map(([icon, text]) => <div key={String(text)} className="surface-card flex items-start gap-3 p-5"><span className="mt-0.5 text-[var(--ps-green-900)]">{icon}</span><p className="text-sm leading-6">{text}</p></div>)}
           </div>
         </div>
-      </section>
+      </ScrollReveal>
 
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 md:px-8 md:py-24">
+      <ScrollReveal as="section" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 md:px-8 md:py-24">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
-          <div><Tag>Clear pricing</Tag><h2 className="font-display mt-4 text-4xl">One small fee per order.</h2><p className="mt-3 text-[var(--ps-grey-600)]">Paid by the seller by default. No hidden surprises.</p></div>
-          <Link href="/pricing" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--ps-green-900)] px-4 text-sm">See pricing <ChevronRight size={16} /></Link>
+          <div><Tag>Clear pricing</Tag><h2 className="font-display mt-4 text-4xl">Transparent terms for every order.</h2><p className="mt-3 text-[var(--ps-grey-600)]">Key payment details are clear upfront, with no hidden surprises.</p></div>
         </div>
-        <FeeCalculator />
-      </section>
+      </ScrollReveal>
 
       {showSocialProof ? (
-        <section className="px-4 py-16 sm:px-6 md:px-8"><div className="mx-auto max-w-7xl rounded-[32px] bg-[var(--ps-green-900)] p-8 text-white"><Tag>Sample</Tag><h2 className="font-display mt-5 text-4xl">A calmer way to work together.</h2><p className="mt-2 text-white/70">Sample content for layout review only. Not a real customer quote.</p></div></section>
+        <ScrollReveal as="section" className="px-4 py-16 sm:px-6 md:px-8"><div className="mx-auto max-w-7xl rounded-[32px] bg-[var(--ps-green-900)] p-8 text-white"><Tag>Sample</Tag><h2 className="font-display mt-5 text-4xl">A calmer way to work together.</h2><p className="mt-2 text-white/70">Sample content for layout review only. Not a real customer quote.</p></div></ScrollReveal>
       ) : null}
 
-      <section className="mx-auto max-w-4xl px-4 py-16 sm:px-6 md:px-8 md:py-24">
+      <ScrollReveal as="section" className="mx-auto max-w-4xl px-4 py-16 sm:px-6 md:px-8 md:py-24">
         <SectionHeading tag="FAQs" title="You have questions. We have answers." />
         <FaqList limit={6} />
-        <div className="mt-6 text-center"><Link href="/faqs" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--ps-green-900)] px-5 text-sm">View all FAQs <ArrowRight size={16} /></Link></div>
-      </section>
+        <div className="mt-6 text-center"><Link href="/faqs" className="btn-secondary">View all FAQs <ArrowRight size={16} /></Link></div>
+      </ScrollReveal>
 
-      <section className="px-4 pb-4 sm:px-6 md:px-8">
+      <ScrollReveal as="section" className="px-4 pb-4 sm:px-6 md:px-8">
         <div className="mx-auto max-w-7xl rounded-[32px] bg-[var(--ps-green-400)] px-6 py-10 text-center text-[var(--ps-green-900)] sm:py-14">
-          <SafrPills />
+          <SafrPills tone="on-green" />
           <h2 className="font-display mx-auto mt-6 max-w-3xl text-4xl leading-tight sm:text-5xl">Work delivered. Payments secured.</h2>
           <p className="mx-auto mt-3 max-w-xl">Make your next online deal feel clearer for everyone.</p>
-          <div className="mt-7 flex flex-wrap justify-center gap-3"><Link href="/get-started" className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[var(--ps-green-900)] px-5 text-white">Get Started <ArrowRight size={16} /></Link><Link href="/sign-in" className="inline-flex min-h-12 items-center rounded-full border border-[var(--ps-green-900)] px-5">Sign In</Link></div>
+          <div className="mt-7 flex flex-wrap justify-center gap-3"><Link href="/get-started" className="btn-dark">Get Started <ArrowRight size={16} /></Link><Link href="/sign-in" className="btn-secondary">Sign In</Link></div>
           <span className="sr-only"><Smartphone /> <CircleHelp /></span>
         </div>
-      </section>
+      </ScrollReveal>
     </main>
     </MarketingShell>
   );
