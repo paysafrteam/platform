@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { z } from "zod";
 import {
   ArrowRight,
@@ -9,26 +10,29 @@ import {
   BriefcaseBusiness,
   Eye,
   EyeOff,
-  LockKeyhole,
-  ShieldCheck,
   Store,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/brand/logo";
-import { PoweredByPaga } from "@/components/brand/powered-by-paga";
-import { SafrPills } from "@/components/brand/safr-pills";
 import { useStatusDialog } from "@/components/feedback/dialog-provider";
-import { ApiPlaceholder } from "@/components/feedback/api-placeholder";
 import { nigerianBanks } from "@/content/nigerian-banks";
 import {
+  ApiError,
   adminSignIn,
   requestPasswordReset,
+  resendVerification,
   resetPassword,
+  savePayoutAccount,
   signIn,
   signUp,
-  updatePayoutAccount,
+  updateMe,
   verifyEmail,
 } from "@/lib/api";
+import { safeNext } from "@/lib/auth-utils";
+
+const PENDING_KEY = "ps_pending_email";
+const readPending = () => (typeof window === "undefined" ? "" : (window.sessionStorage.getItem(PENDING_KEY) ?? ""));
+const writePending = (value: string) => window.sessionStorage.setItem(PENDING_KEY, value);
 
 export type AuthPageName =
   | "sign-in"
@@ -54,14 +58,10 @@ const signUpSchema = z.object({
 export function AuthFlow({ page }: { page: AuthPageName }) {
   const router = useRouter();
   const dialog = useStatusDialog();
-  const [email, setEmail] = useState(
-    page === "sign-in" ? "tolu@example.test" : "",
-  );
+  const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState(
-    page === "sign-in" ? "demo1234" : "",
-  );
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [role, setRole] = useState<"freelancer" | "seller">("freelancer");
   const [showPassword, setShowPassword] = useState(false);
@@ -75,6 +75,12 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
   const [accountNumber, setAccountNumber] = useState("");
   const [accountName, setAccountName] = useState("");
   const [accountVerified, setAccountVerified] = useState(false);
+
+  useEffect(() => {
+    if (page !== "verify-email" && page !== "reset-password") return;
+    const timer = window.setTimeout(() => setEmail((current) => current || readPending()), 0);
+    return () => window.clearTimeout(timer);
+  }, [page]);
 
   useEffect(() => {
     if (!cooldown) return;
@@ -108,10 +114,15 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
       try {
         if (page === "admin-sign-in") await adminSignIn(parsed.data);
         else await signIn(parsed.data);
-        router.push(
-          page === "admin-sign-in" ? "/admin/overview" : "/dashboard",
-        );
+        const next = safeNext(new URLSearchParams(window.location.search).get("next"));
+        router.push(page === "admin-sign-in" ? "/admin/overview" : next);
+        router.refresh();
       } catch (reason) {
+        if (reason instanceof ApiError && reason.code === "EMAIL_NOT_VERIFIED") {
+          writePending(parsed.data.email);
+          router.push("/verify-email");
+          return;
+        }
         setError(
           reason instanceof Error ? reason.message : "We couldn't sign you in.",
         );
@@ -132,12 +143,12 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
       }
       setBusy(true);
       try {
-        await signUp({ ...parsed.data, role });
+        const created = await signUp({ ...parsed.data, role });
+        writePending(created.email);
         dialog.show({
           variant: "success",
           title: "Check your email.",
-          description:
-            "We sent a six-digit verification code. In this demo, use 123456.",
+          description: "We sent a six-digit verification code. It expires in 10 minutes.",
           primaryAction: {
             label: "Verify email",
             onClick: () => router.push("/verify-email"),
@@ -157,7 +168,7 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
     if (page === "verify-email") {
       setBusy(true);
       try {
-        await verifyEmail(code);
+        await verifyEmail({ email: email.trim(), code });
         dialog.show({
           variant: "success",
           title: "Email verified.",
@@ -186,12 +197,12 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
       }
       setBusy(true);
       try {
-        await requestPasswordReset(email);
+        await requestPasswordReset(email.trim());
+        writePending(email.trim());
         dialog.show({
           variant: "success",
-          title: "If that address is registered, a reset link is on its way.",
-          description:
-            "This demo does not send email. You can continue to the reset form.",
+          title: "If that address is registered, a reset code is on its way.",
+          description: "Enter the six-digit code from your email with a new password.",
           primaryAction: {
             label: "Continue",
             onClick: () => router.push("/reset-password"),
@@ -211,7 +222,7 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
     if (page === "reset-password") {
       setBusy(true);
       try {
-        await resetPassword({ code, password });
+        await resetPassword({ email: email.trim(), code, password });
         dialog.show({
           variant: "success",
           title: "Password updated.",
@@ -240,13 +251,10 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
     }
     setBusy(true);
     try {
-      await updatePayoutAccount({
-        bankCode:
-          nigerianBanks.find((bank) => bank.name === bankName)?.code ?? "044",
-        bankName,
+      await savePayoutAccount({
+        bankCode: nigerianBanks.find((bank) => bank.name === bankName)?.code ?? "",
         accountNumber,
-        accountName,
-        verified: true,
+        accountName: accountName.trim(),
       });
       setStep(2);
       dialog.show({
@@ -266,75 +274,18 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
   }
 
   const isAdmin = page === "admin-sign-in";
-  const isFormOnlyAuth = page === "sign-in" || page === "get-started";
   return (
     <main
-      className={
-        isAdmin
-          ? "relative min-h-screen bg-[var(--ps-green-900)] px-4 py-10 text-white"
-          : "relative min-h-screen bg-white"
-      }
+      className={`flex min-h-[100dvh] flex-col px-4 py-8 ${isAdmin ? "bg-[var(--ps-green-900)]" : "bg-[var(--ps-grey-200)]/15"}`}
     >
-      {!isAdmin && !isFormOnlyAuth ? (
-        <aside className="relative hidden min-h-screen overflow-hidden bg-[var(--ps-green-900)] p-10 text-white lg:flex lg:w-[45%] lg:flex-col lg:justify-between">
-          <div className="absolute -top-20 -right-20 size-96 rounded-full bg-[var(--ps-green-400)]/10 blur-3xl" />
-          <div className="relative">
-            <Logo tone="on-dark" />
-            <p className="font-display mt-16 max-w-md text-5xl leading-tight">
-              Work delivered.
-              <br />
-              Payments secured.
-            </p>
-            <div className="mt-7">
-              <SafrPills />
-            </div>
-            <ul className="mt-10 space-y-4 text-sm text-white/75">
-              <li>
-                <ShieldCheck
-                  className="mr-2 inline text-[var(--ps-green-400)]"
-                  size={17}
-                />
-                Money held before work starts.
-              </li>
-              <li>
-                <BadgeCheck
-                  className="mr-2 inline text-[var(--ps-green-400)]"
-                  size={17}
-                />
-                Clear steps for buyers and sellers.
-              </li>
-              <li>
-                <LockKeyhole
-                  className="mr-2 inline text-[var(--ps-green-400)]"
-                  size={17}
-                />
-                Payment confirmed by the bank.
-              </li>
-            </ul>
-            <div className="mt-8 text-xs text-white/60">
-              X @usepaysafr · Instagram @usepaysafr · usepaysafr.com
-            </div>
-          </div>
-          <PoweredByPaga tone="on-dark" />
-        </aside>
-      ) : null}
-      <section
-        className={
-          isAdmin
-            ? "mx-auto max-w-md pt-12"
-            : isFormOnlyAuth
-              ? "mx-auto flex min-h-screen w-full max-w-md items-center px-5 py-12"
-              : "mx-auto flex min-h-screen max-w-7xl items-center lg:ml-[45%] lg:max-w-none lg:px-14"
-        }
-      >
-        <div className="w-full px-5 py-8 sm:px-8 lg:max-w-xl">
-          {!isAdmin && !isFormOnlyAuth ? (
-            <div className="mb-9 lg:hidden">
-              <Logo />
-            </div>
-          ) : isAdmin ? (
+      <section className="my-auto mx-auto w-full max-w-[460px]">
+        <Link href="/" aria-label="PaySafr home" className="mb-6 inline-flex min-h-11 items-center">
+          <Logo />
+        </Link>
+        <div className="surface-card w-full p-5 text-[var(--ps-green-900)] sm:p-8">
+          {isAdmin ? (
             <div className="mb-6 flex items-center justify-between">
-              <span className="rounded-full bg-white/10 px-3 py-1 text-xs">
+              <span className="rounded-full bg-[var(--ps-green-900)]/10 px-3 py-1 text-xs">
                 Admin
               </span>
               <span className="rounded-full bg-[var(--ps-green-400)] px-3 py-1 text-xs text-[var(--ps-green-900)]">
@@ -342,16 +293,12 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
               </span>
             </div>
           ) : null}
-          {!isFormOnlyAuth ? (
-            <>
-              <p className="text-xs tracking-[0.12em] text-[var(--ps-grey-600)] uppercase">
-                {isAdmin ? "PaySafr operations" : "Your PaySafr account"}
-              </p>
-              <h1 className="font-display mt-2 text-3xl sm:text-4xl">
-                {title[page]}
-              </h1>
-            </>
-          ) : null}
+          <p className="text-xs tracking-[0.12em] text-[var(--ps-grey-600)] uppercase">
+            {isAdmin ? "PaySafr operations" : "Your PaySafr account"}
+          </p>
+          <h1 className="font-display mt-2 text-3xl sm:text-4xl">
+            {title[page]}
+          </h1>
           {page === "onboarding" ? (
             <Onboarding
               {...{
@@ -376,14 +323,7 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
           ) : (
             <form
               onSubmit={submit}
-              aria-label={
-                isFormOnlyAuth
-                  ? page === "sign-in"
-                    ? "Sign in"
-                    : "Create account"
-                  : undefined
-              }
-              className={isFormOnlyAuth ? "space-y-5" : "mt-7 space-y-4"}
+              className="mt-7 space-y-4"
             >
               {page === "get-started" ? (
                 <>
@@ -442,6 +382,18 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
                   </div>
                 </>
               ) : null}
+              {page === "verify-email" || page === "reset-password" ? (
+                <label className="block text-sm">
+                  Email address
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    autoComplete="username"
+                    className="mt-2 h-12 w-full rounded-xl border border-[var(--ps-grey-200)] px-4"
+                  />
+                </label>
+              ) : null}
               {page === "verify-email" ? (
                 <>
                   <label className="block text-sm">
@@ -460,7 +412,7 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
                     />
                   </label>
                   <p className="text-xs text-[var(--ps-grey-600)]">
-                    Demo code: 123456
+                    The code expires in 10 minutes. Check your spam folder if it does not arrive.
                   </p>
                 </>
               ) : null}
@@ -478,10 +430,12 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
               {page === "reset-password" ? (
                 <>
                   <label className="block text-sm">
-                    Reset code
+                    Six-digit reset code
                     <input
                       value={code}
-                      onChange={(event) => setCode(event.target.value)}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
                       className="mt-2 h-12 w-full rounded-xl border border-[var(--ps-grey-200)] px-4"
                     />
                   </label>
@@ -518,11 +472,7 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
                       </a>
                     </div>
                   ) : null}
-                  {isAdmin ? (
-                    <p className="rounded-xl bg-white/10 p-3 text-xs text-white/75">
-                      Demo login: admin@paysafr.test · admin1234
-                    </p>
-                  ) : null}
+
                 </>
               ) : null}
               {page === "get-started" ? (
@@ -568,7 +518,7 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
               <button
                 type="submit"
                 disabled={
-                  busy || (page === "verify-email" && code.length !== 6)
+                  busy || ((page === "verify-email" || page === "reset-password") && code.length !== 6)
                 }
                 className="btn-primary w-full disabled:opacity-50"
               >
@@ -583,7 +533,7 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
                         : page === "verify-email"
                           ? "Verify email"
                           : page === "forgot-password"
-                            ? "Send reset link"
+                            ? "Send reset code"
                             : "Reset password"}{" "}
                 <ArrowRight size={17} />
               </button>
@@ -592,8 +542,11 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
                   type="button"
                   disabled={cooldown > 0}
                   onClick={() => {
+                    if (!email.trim()) { setError("Enter your email address first."); return; }
                     setCooldown(30);
-                    toast.info("A new demo code is ready: 123456.");
+                    resendVerification(email.trim())
+                      .then(() => toast.success("A new code is on its way."))
+                      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : "We couldn't send a new code."));
                   }}
                   className="min-h-11 w-full text-sm underline disabled:opacity-50"
                 >
@@ -619,32 +572,16 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
               {page === "reset-password" ? (
                 <p className="text-center text-sm">
                   <a href="/sign-in" className="underline">
-                    Back to sign in
+                    Sign in
                   </a>
                 </p>
-              ) : null}
-              {!isFormOnlyAuth ? (
-                <ApiPlaceholder
-                  endpoint={
-                    page === "verify-email"
-                      ? "POST /api/auth/verify-email"
-                      : page === "forgot-password"
-                        ? "POST /api/auth/forgot-password"
-                        : page === "reset-password"
-                          ? "POST /api/auth/reset-password"
-                          : "POST /api/admin/auth/sign-in"
-                  }
-                />
               ) : null}
             </form>
           )}
           {page === "forgot-password" ? (
             <a href="/sign-in" className="mt-5 inline-block text-sm underline">
-              Back to sign in
+              Sign in
             </a>
-          ) : null}
-          {page === "onboarding" ? (
-            <ApiPlaceholder endpoint="PUT /api/me/payout-account" />
           ) : null}
         </div>
       </section>
@@ -678,7 +615,7 @@ function PasswordField({
           type="button"
           onClick={() => setShow(!show)}
           aria-label={show ? "Hide password" : "Show password"}
-          className="flex size-10 items-center justify-center"
+          className="flex size-11 items-center justify-center"
         >
           {show ? <EyeOff size={17} /> : <Eye size={17} />}
         </button>
@@ -746,7 +683,10 @@ function Onboarding({
           </label>
           <button
             type="button"
-            onClick={() => setStep(1)}
+            onClick={() => {
+              if (businessName.trim()) void updateMe({ businessName: businessName.trim() }).catch(() => toast.error("We couldn't save your business name."));
+              setStep(1);
+            }}
             className="mt-5 min-h-12 w-full rounded-full bg-[var(--ps-green-400)]"
           >
             Continue
@@ -780,31 +720,23 @@ function Onboarding({
                 setAccountNumber(
                   event.target.value.replace(/\D/g, "").slice(0, 10),
                 );
-                setAccountVerified(false);
-              }}
+                }}
               className="mt-2 h-12 w-full rounded-xl border border-[var(--ps-grey-200)] px-4"
             />
           </label>
-          <button
-            type="button"
-            onClick={() => {
-              if (!/^\d{10}$/.test(accountNumber)) {
-                setError("Enter a valid 10-digit account number.");
-                return;
-              }
-              setAccountName("Tolu A. (Demo)");
-              setAccountVerified(true);
-            }}
-            className="mt-4 min-h-11 rounded-full border border-[var(--ps-green-900)] px-4 text-sm"
-          >
-            Check account name
-          </button>
-          {accountName ? (
-            <p className="mt-3 flex items-center gap-2 text-sm">
-              <BadgeCheck size={17} />
-              {accountName}
-            </p>
-          ) : null}
+          <label className="mt-4 block text-sm">
+            Account name
+            <input
+              value={accountName}
+              onChange={(event) => {
+                setAccountName(event.target.value);
+                setAccountVerified(event.target.value.trim().length >= 2);
+              }}
+              className="mt-2 h-12 w-full rounded-xl border border-[var(--ps-grey-200)] px-4"
+              placeholder="Exactly as it appears on your bank account"
+            />
+          </label>
+          <p className="mt-2 text-xs text-[var(--ps-grey-600)]">Payouts go to this account number. Double-check it; automatic name matching arrives with the Paga integration.</p>
           <button
             type="button"
             disabled={busy || !accountVerified}

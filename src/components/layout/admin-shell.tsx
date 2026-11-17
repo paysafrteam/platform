@@ -1,11 +1,11 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { adminSignOut } from "@/lib/api";
 import Link from "next/link";
 import { Activity, Banknote, ClipboardList, FileSearch, Gauge, HandCoins, ScrollText, Settings, Store } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { PoweredByPaga } from "@/components/brand/powered-by-paga";
-import { BackButton } from "@/components/ui/back-button";
 
 const links = [
   { href: "/admin/overview", label: "Overview", icon: Gauge },
@@ -19,15 +19,19 @@ const links = [
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
-export function AdminShell({ children }: { children: React.ReactNode }) {
+export function AdminShell({ children, adminName }: { children: React.ReactNode; adminName?: string }) {
   const pathname = usePathname();
+  const router = useRouter();
+  async function leave() {
+    try { await adminSignOut(); } finally { router.push("/admin/sign-in"); router.refresh(); }
+  }
   if (pathname === "/admin/sign-in") return children;
   return (
     <div className="min-h-screen bg-[var(--ps-grey-200)]/20">
       <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-[var(--ps-grey-200)] bg-white px-5 py-6 lg:flex">
         <Logo />
         <p className="mt-8 rounded-xl bg-[var(--ps-green-900)] px-3 py-2 text-xs tracking-wider text-white">
-          ADMIN · SANDBOX
+          ADMIN{process.env.NEXT_PUBLIC_APP_ENV !== "production" ? " · SANDBOX" : ""}
         </p>
         <nav className="mt-5 flex-1 space-y-1" aria-label="Admin navigation">
           {links.map(({ href, label, icon: Icon }) => (
@@ -47,7 +51,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen lg:pl-64">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-[var(--ps-grey-200)] bg-white/95 px-4 backdrop-blur sm:px-7">
           <div className="flex items-center gap-3">
-            <BackButton />
             <div className="lg:hidden">
               <Logo />
             </div>
@@ -55,9 +58,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               PaySafr operations · Sandbox only
             </p>
           </div>
-          <span className="rounded-full bg-[var(--ps-warning)]/20 px-3 py-1 text-xs">
-            Demo data
-          </span>
+          <div className="flex items-center gap-3">
+            {adminName ? <span className="hidden text-sm sm:inline">{adminName}</span> : null}
+            <button type="button" onClick={() => void leave()} className="min-h-10 rounded-full border border-[var(--ps-grey-200)] px-4 text-sm">Sign out</button>
+          </div>
         </header>
         <main className="mx-auto max-w-7xl px-4 py-6 pb-24 sm:px-7 sm:py-8">
           {children}

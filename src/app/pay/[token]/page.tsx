@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
 import { BuyerCheckout } from "@/components/buyer/buyer-checkout";
 import { InvalidPaymentLink } from "@/components/buyer/invalid-payment-link";
-import { getPayOrder } from "@/lib/api";
+import { getPublicOrderByToken } from "@/server/mappers/orders";
 
-export const dynamic = "force-dynamic";
 export const robots = { index: false, follow: false };
 
 type Props = { params: Promise<{ token: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { token } = await params;
-  const order = await getPayOrder(token);
+  const order = await getPublicOrderByToken(token);
   return {
     title: order ? `Payment for ${order.title}` : "Payment link",
     description: order
@@ -22,7 +21,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function PayPage({ params }: Props) {
   const { token } = await params;
-  const order = await getPayOrder(token);
+  const order = await getPublicOrderByToken(token);
   if (!order) return <InvalidPaymentLink />;
   return <BuyerCheckout initialOrder={order} />;
 }

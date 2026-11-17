@@ -44,7 +44,7 @@ const transitions: Record<Entity, Record<string, readonly string[]>> = {
     cancelled: [],
   },
   milestone: {
-    pending: ["delivered"],
+    pending: ["delivered", "disputed"],
     delivered: ["released", "disputed"],
     disputed: ["released", "refunded"],
     released: [],
@@ -96,4 +96,9 @@ export function isMilestoneAllocationValid(amountsKobo: number[], totalKobo: num
     amountsKobo.every((amount) => Number.isSafeInteger(amount) && amount > 0) &&
     amountsKobo.reduce((sum, amount) => sum + amount, 0) === totalKobo
   );
+}
+
+/** Per-milestone fees using the ORDER total for the tier, so the order fee is exactly their sum. */
+export function allocateMilestoneFees(amountsKobo: number[], orderTotalKobo: number): number[] {
+  return amountsKobo.map((amount) => calcFee(amount, orderTotalKobo));
 }

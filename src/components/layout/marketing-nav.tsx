@@ -30,7 +30,7 @@ export function MarketingNav() {
         </div>
         <div className="flex items-center gap-2 md:hidden">
           <Link href="/get-started" className="btn-primary">Get Started</Link>
-          <button type="button" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} onClick={() => setOpen(!open)} className="inline-flex size-10 items-center justify-center rounded-full border border-[var(--ps-grey-200)]">
+          <button type="button" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} onClick={() => setOpen(!open)} className="inline-flex size-11 items-center justify-center rounded-full border border-[var(--ps-grey-200)]">
             {open ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>

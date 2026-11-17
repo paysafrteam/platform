@@ -5,6 +5,7 @@ import {
   CircleDollarSign,
   FileCheck2,
   Home,
+  LogOut,
   Plus,
   ReceiptText,
   Settings,
@@ -13,10 +14,11 @@ import {
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { signOut } from "@/lib/api";
 import { Logo } from "@/components/brand/logo";
 import { PoweredByPaga } from "@/components/brand/powered-by-paga";
-import { BackButton } from "@/components/ui/back-button";
 
 const links = [
   { href: "/dashboard", label: "Dashboard", icon: Home },
@@ -30,15 +32,26 @@ const links = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function SellerShell({ children }: { children: React.ReactNode }) {
+export function SellerShell({ children, userName }: { children: React.ReactNode; userName: string }) {
   const pathname = usePathname();
+  const router = useRouter();
+  async function leave() {
+    try {
+      await signOut();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "We couldn't sign you out.");
+    } finally {
+      router.push("/sign-in");
+      router.refresh();
+    }
+  }
   return (
     <div className="min-h-screen bg-[var(--ps-grey-200)]/20">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-[var(--ps-grey-200)] bg-white px-5 py-6 lg:flex">
         <Logo />
         <div className="mt-8 rounded-2xl bg-[var(--ps-green-400)]/20 p-4">
-          <p className="text-xs text-[var(--ps-grey-600)]">DEMO SELLER</p>
-          <p className="mt-1 text-sm">Tolu A.</p>
+          <p className="text-xs text-[var(--ps-grey-600)]">SIGNED IN</p>
+          <p className="mt-1 truncate text-sm">{userName}</p>
         </div>
         <nav className="mt-6 flex-1 space-y-1" aria-label="Seller navigation">
           {links.map(({ href, label, icon: Icon }) => (
@@ -62,28 +75,46 @@ export function SellerShell({ children }: { children: React.ReactNode }) {
         <div className="mt-5">
           <PoweredByPaga variant="footer" />
         </div>
-        <Link href="/" className="mt-4 text-xs text-[var(--ps-grey-600)]">
-          Back to PaySafr
-        </Link>
+        <button type="button" onClick={() => void leave()} className="mt-4 inline-flex min-h-11 items-center gap-2 text-left text-sm text-[var(--ps-grey-600)] underline">
+          <LogOut size={16} aria-hidden="true" />
+          Sign out
+        </button>
       </aside>
       <div className="min-h-screen lg:pl-64">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-[var(--ps-grey-200)] bg-white/95 px-4 backdrop-blur sm:px-7">
           <div className="flex items-center gap-3">
-            <BackButton />
             <div className="lg:hidden">
               <Logo />
             </div>
             <p className="hidden text-sm text-[var(--ps-grey-600)] lg:block">
-              Seller workspace · Demo mode
+              Seller workspace{process.env.NEXT_PUBLIC_APP_ENV !== "production" ? " · Sandbox" : ""}
             </p>
           </div>
-          <Link
-            href="/notifications"
-            className="flex size-11 items-center justify-center rounded-full border border-[var(--ps-grey-200)]"
-            aria-label="Notifications"
-          >
-            <Bell size={18} />
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void leave()}
+              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--ps-grey-200)] px-3 text-sm lg:hidden"
+            >
+              <LogOut size={16} aria-hidden="true" />
+              Sign out
+            </button>
+            <Link
+              href="/notifications"
+              className="flex size-11 items-center justify-center rounded-full border border-[var(--ps-grey-200)]"
+              aria-label="Notifications"
+            >
+              <Bell size={18} />
+            </Link>
+            <Link
+              href="/settings"
+              aria-label="Settings"
+              aria-current={pathname === "/settings" ? "page" : undefined}
+              className="flex size-11 items-center justify-center rounded-full border border-[var(--ps-grey-200)] lg:hidden"
+            >
+              <Settings size={18} />
+            </Link>
+          </div>
         </header>
         <div className="mx-auto max-w-7xl px-4 py-6 pb-28 sm:px-7 sm:py-8 lg:pb-10">
           {children}

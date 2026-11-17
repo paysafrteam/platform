@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { getPayOrder } from "@/lib/api";
+import { getPublicOrderByToken } from "@/server/mappers/orders";
 import { formatNaira } from "@/lib/format/money";
 
 export const alt = "PaySafr protected payment";
@@ -10,7 +10,7 @@ export const contentType = "image/png";
 
 export default async function OpenGraphImage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const order = await getPayOrder(token);
+  const order = await getPublicOrderByToken(token);
   const font = await readFile(path.join(process.cwd(), "public", "fonts", "halfre.ttf"));
   return new ImageResponse(
     (

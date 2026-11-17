@@ -13,7 +13,7 @@ export default function TypographyPage() {
   return (
     <main className="mx-auto max-w-5xl px-6 py-14">
       <Link className="text-sm underline" href="/">
-        Back to PaySafr
+        PaySafr home
       </Link>
       <p className="mt-10 text-xs font-semibold tracking-[0.14em] text-[var(--ps-grey-600)] uppercase">
         Development only · Font specimen

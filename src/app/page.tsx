@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowDownRight,
   ArrowRight,
@@ -21,7 +22,6 @@ import {
 } from "lucide-react";
 import { FaqList } from "@/components/marketing/faq-list";
 import { MarketingShell } from "@/components/layout/marketing-shell";
-import { Logo } from "@/components/brand/logo";
 import { PoweredByPaga } from "@/components/brand/powered-by-paga";
 import { SafrPills } from "@/components/brand/safr-pills";
 import { ScrollReveal } from "@/components/ui/scroll-reveal";
@@ -68,7 +68,7 @@ export default function Home() {
   return (
     <MarketingShell>
     <main>
-      <ScrollReveal as="section" className="mx-auto grid max-w-7xl gap-10 px-4 pt-12 pb-16 sm:px-6 md:grid-cols-[1.05fr_0.95fr] md:items-center md:px-8 md:pt-20 md:pb-24">
+      <ScrollReveal as="section" className="mx-auto grid max-w-7xl gap-10 px-4 pt-12 pb-16 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:px-8 lg:pt-20 lg:pb-24">
         <div className="relative z-10">
           <Tag><ShieldCheck size={14} /> Escrow for freelancers and online sellers</Tag>
           <h1 className="font-display mt-6 max-w-3xl text-[clamp(2.5rem,7vw,4.75rem)] leading-[1.02] tracking-[-0.03em]">Work delivered.<br className="hidden sm:block" /> Payments secured.</h1>
@@ -88,30 +88,16 @@ export default function Home() {
           </div>
           <div className="mt-6"><PoweredByPaga /></div>
         </div>
-        <div className="brand-glow relative min-h-[440px] overflow-hidden rounded-[32px] p-5 text-white sm:p-8">
-          <div className="absolute -top-20 right-2 size-72 rounded-full border border-[var(--ps-green-400)]/20" />
-          <div className="absolute top-0 right-12 size-52 rounded-full border border-[var(--ps-green-400)]/10" />
-          <div className="relative mx-auto max-w-[330px] rounded-[30px] border border-white/20 bg-[var(--ps-green-800)] p-5 shadow-2xl sm:mt-8">
-            <div className="flex items-center justify-between"><Logo tone="on-dark" /><span className="rounded-full bg-[var(--ps-green-400)] px-3 py-1 text-xs text-[var(--ps-green-900)]">Protected</span></div>
-            <div className="mt-6 rounded-2xl bg-white p-5 text-[var(--ps-green-900)]">
-              <p className="text-xs text-[var(--ps-grey-600)]">Payment link</p>
-              <h2 className="mt-2 text-lg">Logo design for Zuri</h2>
-              <p className="money mt-2 text-3xl">{formatNaira(15_000_000)}</p>
-              <div className="mt-4 flex items-center gap-3 border-t border-[var(--ps-grey-200)] pt-4">
-                <span className="flex size-10 items-center justify-center rounded-full bg-[var(--ps-green-900)] text-white">TA</span>
-                <span className="flex-1"><span className="block text-sm">Tolu A.</span><span className="text-xs text-[var(--ps-grey-600)]">Graphic designer</span></span>
-                <span className="rounded-full bg-[var(--ps-green-400)]/30 px-2 py-1 text-xs">Trusted · 78</span>
-              </div>
-              <div className="mt-4 flex items-center gap-2 rounded-xl bg-[var(--ps-green-400)]/20 p-3 text-sm"><ShieldCheck size={18} /> Money is held safely</div>
-            </div>
-          </div>
-          <div className="absolute top-14 left-3 hidden rounded-2xl border border-white/15 bg-[var(--ps-green-800)] p-3 shadow-xl sm:block md:left-[-18px]">
-            <p className="text-xs text-white/70">Payment verified</p><p className="money mt-1 text-lg">{formatNaira(15_000_000)}</p>
-          </div>
-          <div className="absolute right-4 bottom-20 hidden rounded-2xl border border-white/15 bg-[var(--ps-green-800)] p-3 shadow-xl sm:block md:right-[-12px]">
-            <p className="text-xs text-white/70">Released to seller</p><p className="money mt-1 text-lg">{formatNaira(7_350_000)}</p><p className="text-[10px] text-white/60">2% fee deducted</p>
-          </div>
-          <div className="absolute right-8 bottom-5"><SafrPills /></div>
+        <div className="overflow-hidden rounded-[32px] bg-[var(--ps-green-900)]">
+          <Image
+            src="/paysafr-hero-img.png"
+            alt="A smiling woman holding a phone, with PaySafr payment notifications"
+            width={1368}
+            height={768}
+            priority
+            sizes="(min-width: 1280px) 578px, (min-width: 1024px) 42vw, (min-width: 640px) calc(100vw - 48px), calc(100vw - 32px)"
+            className="h-auto w-full object-contain"
+          />
         </div>
       </ScrollReveal>
 

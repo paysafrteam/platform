@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowLeft,
   ArrowRight,
   BadgeCheck,
   Check,
@@ -19,10 +18,8 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ApiPlaceholder } from "@/components/feedback/api-placeholder";
 import { ErrorState } from "@/components/feedback/states";
 import { useStatusDialog } from "@/components/feedback/dialog-provider";
-import { DevScenarioSwitcher } from "@/components/buyer/dev-scenario-switcher";
 import { PoweredByPaga } from "@/components/brand/powered-by-paga";
 import { Logo } from "@/components/brand/logo";
 import { CopyField } from "@/components/ui/copy-field";
@@ -30,9 +27,9 @@ import { Countdown, useCurrentTime } from "@/components/ui/countdown";
 import { Money } from "@/components/ui/money";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ShareActions } from "@/components/share/share-actions";
-import { checkPayment, confirmMilestone, contactSeller, getPayOrder, requestChanges } from "@/lib/api";
+import { checkPayment, confirmMilestone, contactSeller, getPayOrder, requestChanges, simulatePayment } from "@/lib/api";
 import { formatLagosDate } from "@/lib/format/dates";
-import type { Milestone, Order } from "@/lib/domain/types";
+import type { Milestone, PublicOrder as Order } from "@/lib/domain/types";
 
 const protectionRules = [
   "Your money is held before work starts.",
@@ -54,9 +51,7 @@ export function BuyerCheckout({ initialOrder }: { initialOrder: Order }) {
   const reload = useCallback(async () => {
     setLoadingError(false);
     try {
-      const latest = await getPayOrder(initialOrder.token);
-      if (!latest) throw new Error("Order not found.");
-      setOrder(latest);
+      setOrder(await getPayOrder(initialOrder.token));
     } catch (error) {
       setLoadingError(true);
       console.error("Buyer order refresh failed", error);
@@ -68,12 +63,18 @@ export function BuyerCheckout({ initialOrder }: { initialOrder: Order }) {
     return () => window.clearTimeout(timer);
   }, [reload]);
 
+  useEffect(() => {
+    if (order.status !== "awaiting_payment") return;
+    const timer = window.setInterval(() => void reload(), 8000);
+    return () => window.clearInterval(timer);
+  }, [order.status, reload]);
+
   const activeMilestone = useMemo(
     () => order.milestones.find((item) => item.status === "delivered" || item.status === "disputed") ?? order.milestones[0],
     [order.milestones],
   );
-  const isPartial = order.token === "demo-partial" && order.amountFundedKobo < order.totalKobo;
-  const isOverpaid = order.token === "demo-overpaid" && Boolean(order.overpaidKobo);
+  const isPartial = order.status === "awaiting_payment" && order.amountFundedKobo > 0 && order.amountFundedKobo < order.totalKobo;
+  const isOverpaid = order.overpaidKobo > 0;
   const hasDelivered = order.milestones.some((milestone) => milestone.status === "delivered");
   const isDisputed = order.milestones.some((milestone) => milestone.status === "disputed");
   const allRefunded = order.milestones.length > 0 && order.milestones.every((milestone) => milestone.status === "refunded");
@@ -85,12 +86,11 @@ export function BuyerCheckout({ initialOrder }: { initialOrder: Order }) {
     try {
       const result = await checkPayment(order.token);
       setOrder(result.order);
-      dialog.show({
-        variant: "success",
-        title: "Payment received.",
-        description: "Your money is held safely. The seller can now start the work.",
-        primaryAction: { label: "Continue" },
-      });
+      if (result.status === "funded") {
+        dialog.show({ variant: "success", title: "Payment received.", description: "Your money is held safely. The seller can now start the work.", primaryAction: { label: "Continue" } });
+      } else {
+        dialog.show({ variant: "warning", title: "We haven't received it yet.", description: "Bank transfers can take a few minutes. Keep this page open; it updates by itself once your payment arrives.", primaryAction: { label: "OK" } });
+      }
     } catch (error) {
       dialog.show({ variant: "danger", title: "We couldn't confirm that yet.", description: error instanceof Error ? error.message : "Try again in a moment.", primaryAction: { label: "Try again", onClick: () => void markTransfer() } });
     }
@@ -112,6 +112,17 @@ export function BuyerCheckout({ initialOrder }: { initialOrder: Order }) {
       dialog.show({ variant: "success", title: "Delivery confirmed.", description: "The payment has been released to the seller.", primaryAction: { label: "Done" } });
     } catch (error) {
       dialog.show({ variant: "danger", title: "We couldn't release this payment.", description: error instanceof Error ? error.message : "Try again in a moment.", primaryAction: { label: "Close" } });
+    }
+  }
+
+  async function sandboxPay() {
+    dialog.show({ variant: "loading", title: "Simulating your bank transfer…", description: "Sandbox only. No real money moves." });
+    try {
+      await simulatePayment(order.token);
+      await reload();
+      dialog.show({ variant: "success", title: "Sandbox payment received.", description: "The order is funded and your money is held safely.", primaryAction: { label: "Continue" } });
+    } catch (error) {
+      dialog.show({ variant: "danger", title: "The sandbox payment failed.", description: error instanceof Error ? error.message : "Try again.", primaryAction: { label: "Close" } });
     }
   }
 
@@ -191,7 +202,7 @@ export function BuyerCheckout({ initialOrder }: { initialOrder: Order }) {
           <section className="surface-card h-fit p-5 sm:p-7">{summaryContent}</section>
           <section className="space-y-4">
             {order.status === "awaiting_payment" ? (
-              <PaymentPanel order={order} partial={isPartial} onPaid={markTransfer} onTrouble={() => setSheet("trouble")} contact={contact} setContact={setContact} onSaveContact={saveContact} savingContact={savingContact} />
+              <PaymentPanel order={order} partial={isPartial} onPaid={markTransfer} onSandboxPay={() => void sandboxPay()} onTrouble={() => setSheet("trouble")} contact={contact} setContact={setContact} onSaveContact={saveContact} savingContact={savingContact} />
             ) : null}
             {order.status === "expired" || order.status === "cancelled" ? <ClosedPanel order={order} expired={order.status === "expired"} /> : null}
             {order.status === "completed" && allRefunded ? <CompletionPanel order={order} refunded /> : null}
@@ -204,7 +215,7 @@ export function BuyerCheckout({ initialOrder }: { initialOrder: Order }) {
           </section>
         </div>
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
-          <Link href="/" className="inline-flex min-h-10 items-center gap-2 text-sm text-[var(--ps-grey-600)]"><ArrowLeft size={16} /> PaySafr home</Link>
+          <Link href="/" className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--ps-grey-600)]">PaySafr home</Link>
           <PoweredByPaga variant="footer" />
         </div>
       </div>
@@ -213,14 +224,12 @@ export function BuyerCheckout({ initialOrder }: { initialOrder: Order }) {
       {sheet ? <ActionSheet title={sheet === "trouble" ? "Having trouble paying?" : "Ask for changes"} onClose={() => setSheet(null)}>
         {sheet === "trouble" ? <div className="space-y-4 text-sm leading-6 text-[var(--ps-grey-600)]"><p>Use your bank app or wallet to transfer the exact amount shown to the account above.</p><p>The bank may take a little time to confirm a transfer. Keep this page open and check again.</p><p>A screenshot does not mark the order as paid. Only a verified bank confirmation does.</p></div> : <div><label className="block text-sm" htmlFor="change-note">What would you like the seller to change?</label><textarea id="change-note" rows={4} value={changeNote} onChange={(event) => setChangeNote(event.target.value)} className="mt-2 w-full rounded-2xl border border-[var(--ps-grey-200)] p-3" placeholder="Tell the seller what needs a closer look." /><button type="button" onClick={() => void sendChangeRequest()} className="mt-4 min-h-12 w-full rounded-full bg-[var(--ps-green-400)]">Send request</button></div>}
       </ActionSheet> : null}
-      <DevScenarioSwitcher currentToken={order.token} />
-      <ApiPlaceholder endpoint="GET /api/pay/:token" />
     </main>
   );
 }
 
-function PaymentPanel({ order, partial, onPaid, onTrouble, contact, setContact, onSaveContact, savingContact }: {
-  order: Order; partial: boolean; onPaid: () => void; onTrouble: () => void; contact: string;
+function PaymentPanel({ order, partial, onPaid, onSandboxPay, onTrouble, contact, setContact, onSaveContact, savingContact }: {
+  order: Order; partial: boolean; onPaid: () => void; onSandboxPay: () => void; onTrouble: () => void; contact: string;
   setContact: (value: string) => void; onSaveContact: () => void; savingContact: boolean;
 }) {
   const remaining = Math.max(0, order.totalKobo - order.amountFundedKobo);
@@ -231,11 +240,11 @@ function PaymentPanel({ order, partial, onPaid, onTrouble, contact, setContact, 
       <h2 className="font-display text-2xl leading-tight">Pay <Money kobo={partial ? remaining : order.totalKobo} /> by bank transfer</h2>
       <p className="mt-2 text-sm text-[var(--ps-grey-600)]">Use these details in your bank app. Your order account is for this order only.</p>
       <div className="mt-4 rounded-2xl border border-[var(--ps-grey-200)] px-4">
-        <CopyField label="Bank" value={account?.bankName ?? "Access Bank"} />
-        <CopyField label="Account number" value={account?.accountNumber ?? "0000000000"} large />
-        <CopyField label="Account name" value={account?.accountName ?? "PaySafr Demo Collection"} />
+        <CopyField label="Bank" value={account?.bankName ?? ""} />
+        <CopyField label="Account number" value={account?.accountNumber ?? ""} large />
+        <CopyField label="Account name" value={account?.accountName ?? ""} />
         <CopyField label="Amount to send" value={formatAmount(partial ? remaining : order.totalKobo)} large />
-        <div className="flex items-center justify-between gap-3 border-t border-[var(--ps-grey-200)] py-3 text-sm"><span className="text-[var(--ps-grey-600)]">Pay within</span><span className="money"><Countdown target={account?.expiresAt ?? order.expiresAt} label="Payment link expires" /></span></div>
+        <div className="flex items-center justify-between gap-3 border-t border-[var(--ps-grey-200)] py-3 text-sm"><span className="text-[var(--ps-grey-600)]">Pay within</span><span className="money"><Countdown target={account?.expiresAt ?? order.expiresAt ?? order.createdAt} label="Payment link expires" /></span></div>
       </div>
       <div className="mt-4"><PoweredByPaga /></div>
       <ol className="mt-5 space-y-3">
@@ -248,7 +257,13 @@ function PaymentPanel({ order, partial, onPaid, onTrouble, contact, setContact, 
         <div className="flex items-center gap-2 text-sm"><Mail size={15} /> Get updates <span className="text-xs text-[var(--ps-grey-600)]">Optional</span></div>
         <div className="mt-2 flex gap-2"><input aria-label="Email or phone number for updates" value={contact} onChange={(event) => setContact(event.target.value)} className="h-11 min-w-0 flex-1 rounded-2xl border border-[var(--ps-grey-200)] px-3 text-sm" placeholder="Email or phone number" /><button type="button" onClick={onSaveContact} disabled={!contact || savingContact} className="min-h-11 rounded-full border border-[var(--ps-green-900)] px-4 text-sm disabled:opacity-50">{savingContact ? "Saving" : "Save"}</button></div>
       </div>
-      <div className="mt-4"><ApiPlaceholder endpoint="POST /api/pay/:token/check-payment" /></div>
+      {process.env.NEXT_PUBLIC_APP_ENV !== "production" ? (
+        <div className="mt-5 rounded-2xl border border-dashed border-[var(--ps-warning)] bg-[var(--ps-warning)]/10 p-4">
+          <p className="text-xs uppercase tracking-wider text-[var(--ps-grey-600)]">Sandbox only</p>
+          <p className="mt-1 text-sm">This is a test environment. Don&apos;t send real money to the account above.</p>
+          <button type="button" onClick={onSandboxPay} className="mt-3 min-h-11 rounded-full border border-[var(--ps-green-900)] px-4 text-sm">Simulate this bank transfer</button>
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -256,7 +271,7 @@ function PaymentPanel({ order, partial, onPaid, onTrouble, contact, setContact, 
 function FundedPanel({ order, overpaid }: { order: Order; overpaid: boolean }) {
   return (
     <article className="surface-card overflow-hidden">
-      {overpaid ? <div className="border-b border-[var(--ps-warning)]/50 bg-[var(--ps-warning)]/15 p-4 text-sm"><CircleAlert size={16} className="mr-2 inline" />You sent <Money kobo={order.overpaidKobo ?? 500_000} /> extra. We&apos;ll refund it unless the seller agrees to keep it for this order.</div> : null}
+      {overpaid ? <div className="border-b border-[var(--ps-warning)]/50 bg-[var(--ps-warning)]/15 p-4 text-sm"><CircleAlert size={16} className="mr-2 inline" />You sent <Money kobo={order.overpaidKobo} /> extra. We&apos;ll refund it unless the seller agrees to keep it for this order.</div> : null}
       <div className="bg-[var(--ps-green-900)] p-6 text-white sm:p-7">
         <span className="flex size-12 items-center justify-center rounded-full bg-[var(--ps-green-400)] text-[var(--ps-green-900)]"><Check size={25} /></span>
         <h2 className="font-display mt-4 text-3xl">Money is held safely.</h2>
@@ -264,16 +279,16 @@ function FundedPanel({ order, overpaid }: { order: Order; overpaid: boolean }) {
       </div>
       <div className="p-5 sm:p-7">
         <ol className="space-y-4 border-l border-[var(--ps-grey-200)] pl-5">
-          <TimelineItem done title="You paid" detail={`Payment verified · ${formatLagosDate(order.createdAt)}`} />
+          <TimelineItem done title="You paid" detail={`Payment verified · ${formatLagosDate(order.fundedAt ?? order.createdAt)}`} />
           <TimelineItem title="Seller is working" detail={`Delivery by ${formatLagosDate(order.deliveryDeadline)}`} />
           <TimelineItem title="You review" detail={`${order.reviewWindowHours} hours to review after delivery`} />
           <TimelineItem title="Done" detail="Payment releases when you confirm or review time ends." />
         </ol>
         <div className="mt-6 rounded-2xl border border-[var(--ps-grey-200)] p-4">
-          <div className="flex items-start justify-between gap-3"><div><p className="text-xs text-[var(--ps-grey-600)]">Payment receipt</p><p className="mt-1 text-sm">PS-2026-000123</p></div><FileCheck2 size={20} /></div>
+          <div className="flex items-start justify-between gap-3"><div><p className="text-xs text-[var(--ps-grey-600)]">Payment receipt</p><p className="mt-1 text-sm">{order.paymentReceipt?.number ?? "Issuing…"}</p></div><FileCheck2 size={20} /></div>
           <p className="money mt-3 text-2xl"><Money kobo={order.totalKobo} /></p>
-          <p className="mt-1 text-xs text-[var(--ps-grey-600)]">Paid · {formatLagosDate(order.createdAt)}</p>
-          <div className="mt-4"><ShareActions kind="receipt" /></div>
+          <p className="mt-1 text-xs text-[var(--ps-grey-600)]">Paid · {formatLagosDate(order.fundedAt ?? order.createdAt)}</p>
+          {order.paymentReceipt ? <div className="mt-4"><ShareActions kind="receipt" copyUrl={`/r/${order.paymentReceipt.publicToken}`} shareText={`PaySafr receipt ${order.paymentReceipt.number}`} /></div> : null}
         </div>
         <p className="mt-4 text-sm leading-6 text-[var(--ps-grey-600)]">Your money is safe with PaySafr. It is only released when you confirm, or when the review time ends.</p>
         <div className="mt-4"><PoweredByPaga /></div>
@@ -291,8 +306,7 @@ function DeliveredPanel({ order, milestone, onConfirm, onChanges }: { order: Ord
       <div className="flex items-start gap-3 rounded-2xl bg-[var(--ps-warning)]/15 p-4"><FileCheck2 size={19} /><p className="text-sm">{order.seller.name.replace(/\.$/, "")} marked this as delivered.</p></div>
       <div className="mt-5 rounded-2xl border border-[var(--ps-grey-200)] p-4">
         <p className="text-xs text-[var(--ps-grey-600)]">Delivery proof</p>
-        {proof?.kind === "file" ? <p className="mt-2 text-sm">{proof.fileName ?? "Attached file"}</p> : null}
-        {proof?.kind === "link" ? <a className="mt-2 block break-all text-sm underline" href={safeHttpUrl(proof.content)} target="_blank" rel="noopener noreferrer">{proof.content}</a> : null}
+                {proof?.kind === "link" ? <a className="mt-2 block break-all text-sm underline" href={safeHttpUrl(proof.content)} target="_blank" rel="noopener noreferrer">{proof.content}</a> : null}
         <p className="mt-2 text-sm leading-6">{proof?.content ?? "The seller has marked this item as delivered and is ready for your review."}</p>
       </div>
       {milestone.releaseAt ? <div className="mt-4 rounded-2xl bg-[var(--ps-green-900)] p-4 text-white"><div className="flex items-center gap-2 text-sm"><Clock3 size={17} /> Money is released in <Countdown target={milestone.releaseAt} label="Automatic release" /></div><p className="mt-1 text-xs text-white/70">unless you respond before then</p></div> : null}
@@ -302,7 +316,6 @@ function DeliveredPanel({ order, milestone, onConfirm, onChanges }: { order: Ord
         <button type="button" onClick={onChanges} className="min-h-12 w-full rounded-full border border-[var(--ps-green-900)] px-5">Ask for changes</button>
         <Link href={`/pay/${order.token}/dispute?milestone=${encodeURIComponent(milestone.id)}`} className="flex min-h-11 items-center justify-center gap-2 text-sm text-[var(--ps-danger)]"><Flag size={16} /> Open a dispute</Link>
       </div>
-      <div className="mt-3"><ApiPlaceholder endpoint="POST /api/pay/:token/milestones/:mid/confirm" /></div>
     </article>
   );
 }
@@ -310,7 +323,7 @@ function DeliveredPanel({ order, milestone, onConfirm, onChanges }: { order: Ord
 function DisputedPanel({ order }: { order: Order }) {
   return (
     <article className="surface-card p-5 sm:p-7">
-      <div className="rounded-2xl bg-[var(--ps-green-900)] p-5 text-white"><span className="flex size-11 items-center justify-center rounded-full bg-white/10"><LockKeyhole size={21} /></span><h2 className="font-display mt-4 text-2xl">Your money is on hold while we review.</h2><p className="mt-2 text-sm text-white/70">The seller has time to respond. We&apos;ll keep the decision and next step clear.</p></div>
+      <div className="rounded-2xl bg-[var(--ps-green-900)] p-5 text-white"><span className="flex size-11 items-center justify-center rounded-full bg-white/10"><LockKeyhole size={21} /></span><h2 className="font-display mt-4 text-2xl">Your money is on hold while we review.</h2><p className="mt-2 text-sm text-white/70">The seller has time to respond. A PaySafr reviewer then decides, with a written reason both sides can read.</p></div>
       <ol className="mt-6 space-y-4">
         <TimelineItem done title="Dispute opened" detail="The payment is held safely." />
         <TimelineItem title="Seller response" detail="They have 48 hours to respond." />
@@ -330,7 +343,7 @@ function CompletionPanel({ order, refunded = false }: { order: Order; refunded?:
         <h2 className="font-display mt-4 text-3xl">{refunded ? "Your money was returned." : "All done."}</h2>
         <p className="money mt-2 text-xl"><Money kobo={order.totalKobo} /> {refunded ? "was returned to you." : `was paid out to ${order.seller.name}.`}</p>
       </div>
-      <div className="p-5 sm:p-7"><p className="text-xs text-[var(--ps-grey-600)]">Completion receipt · PS-2026-000123</p><p className="money mt-2 text-2xl"><Money kobo={order.totalKobo} /></p><p className="mt-1 text-xs text-[var(--ps-grey-600)]">{formatLagosDate(order.completedAt ?? order.createdAt)}</p><div className="mt-4"><ShareActions kind="receipt" /></div><div className="mt-5"><PoweredByPaga /></div></div>
+      <div className="p-5 sm:p-7"><p className="text-xs text-[var(--ps-grey-600)]">Completion receipt · {order.completionReceipt?.number ?? "Issuing…"}</p><p className="money mt-2 text-2xl"><Money kobo={order.totalKobo} /></p><p className="mt-1 text-xs text-[var(--ps-grey-600)]">{formatLagosDate(order.completedAt ?? order.createdAt)}</p>{order.completionReceipt ? <div className="mt-4"><ShareActions kind="receipt" copyUrl={`/r/${order.completionReceipt.publicToken}`} shareText={`PaySafr receipt ${order.completionReceipt.number}`} /></div> : null}<Link href={`/pay/${order.token}/receipt`} className="mt-3 inline-flex min-h-10 items-center text-sm underline">View all receipts</Link><div className="mt-5"><PoweredByPaga /></div></div>
     </article>
   );
 }
@@ -341,7 +354,7 @@ function ClosedPanel({ order, expired }: { order: Order; expired: boolean }) {
       <span className="flex size-12 items-center justify-center rounded-full bg-[var(--ps-grey-200)]/50"><Clock3 size={22} /></span>
       <h2 className="font-display mt-4 text-3xl">{expired ? "This payment link has expired." : "This order was cancelled."}</h2>
       <p className="mt-2 text-sm leading-6 text-[var(--ps-grey-600)]">{expired ? "Ask the seller for a new payment link. Already sent money? Don't worry. We'll flag it and refund you." : "Ask the seller if you need a new order link."}</p>
-      <a href={`mailto:${order.seller.email}`} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--ps-green-900)] px-4 text-sm">Ask the seller for a new link <ArrowRight size={16} /></a>
+      <p className="mt-4 text-sm">Contact {order.seller.name} directly for a new link.</p>
     </article>
   );
 }
@@ -352,7 +365,7 @@ function TimelineItem({ done = false, title, detail }: { done?: boolean; title: 
 
 function ActionSheet({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgb(17_43_0_/_40%)] backdrop-blur-sm sm:items-center" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgb(17_43_0_/_40%)] backdrop-blur-sm sm:items-center" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section role="dialog" aria-modal="true" aria-label={title} className="w-full max-w-lg rounded-t-[28px] bg-white p-5 pb-[max(20px,env(safe-area-inset-bottom))] sm:rounded-[28px] sm:p-7">
         <div className="mb-5 flex items-center justify-between"><h2 className="font-display text-2xl">{title}</h2><button type="button" className="flex size-10 items-center justify-center rounded-full border border-[var(--ps-grey-200)]" onClick={onClose} aria-label="Close sheet"><X size={18} /></button></div>
         {children}

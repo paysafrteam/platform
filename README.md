@@ -1,78 +1,60 @@
-# PaySafr frontend
+# PaySafr
 
-PaySafr is an escrow and invoicing experience for freelancers and online sellers in Nigeria. This repository is being built in phases, starting with the design-system foundation and then the buyer payment flow.
+Escrow and invoicing for freelancers and online sellers in Nigeria. A seller shares a payment link, the buyer pays by bank transfer with no account, PaySafr holds the money, and releases it when the buyer confirms, when the review window ends, or when an admin settles a dispute.
 
-## Run locally
+Next.js 16 (App Router, Cache Components) + PostgreSQL. Money is integer kobo everywhere; every naira is recorded in an append-only ledger.
 
-Requirements: Node.js LTS and npm. From this folder:
+## Run it locally
 
 ```bash
+cp .env.example .env.local          # fill in DATABASE_URL, OTP_PEPPER, CRON_SECRET (openssl rand -hex 32)
 npm install
-npm run dev
+npm run db:migrate                  # applies db/migrations/*.sql
+ADMIN_SEED_EMAIL=you@x.com ADMIN_SEED_PASSWORD='a-long-password' npm run seed:admin
+npm run dev                         # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Useful scripts:
+- Sign up as a seller at `/get-started`. With no SMTP configured in sandbox, the verification code is written to `.dev-outbox/*.json`.
+- Admin console: `/admin/sign-in`.
+- On a payment page in sandbox, **Simulate this bank transfer** stands in for the buyer's bank transfer.
+- Background jobs (expire unpaid orders, reminders, auto-release, payout retries): call `POST /api/cron/tick` with `Authorization: Bearer $CRON_SECRET` every 1 to 5 minutes (GitHub Actions, cron-job.org, Vercel Cron), or run `npm run jobs:tick` locally.
 
-```bash
-npm run lint
-npm run typecheck
-npm run build
-npm run start
-npm run format
-```
+Scripts: `npm test` (needs a `paysafr_test` database, see below), `npm run lint`, `npm run typecheck`, `npm run build`, `npm run admin:set-password -- <email>`.
 
-## Current development routes
+Tests: `createdb paysafr_test` then `TEST_DATABASE_URL=postgres://... npm test`. The suite drops and recreates the `public` schema of that database, so never point it at real data.
 
-- `/` - PaySafr scaffold preview.
-- `/dev/typography` - supplied font and missing-glyph specimen. Returns 404 in production.
-- `/dev/components` - initial brand and component gallery. Returns 404 in production.
+## Architecture
 
-Buyer demo routes and scenario switcher are added in Phase 2.
+| Area | Where |
+| --- | --- |
+| Schema and constraints | `db/migrations/0001_init.sql` (ledger and audit log are append-only via triggers; a trigger refuses any ledger entry that would take an order's held balance below zero) |
+| Money services | `src/server/services/` : `funding` (the only code that credits an order), `settlement` (release), `disputes`, `payouts`, `jobs`, `trust`, `receipts`, `orders`, `admin` |
+| Payment rail | `src/server/payments/provider.ts` interface, `simulator.ts` implementation. Nothing else may talk to Paga. |
+| HTTP | `src/app/api/**/route.ts`, all wrapped by `withApi` (Origin check, zod validation, auth, rate limits, uniform errors) |
+| Auth | Email + password, 6-digit emailed OTP (hashed, 5 attempts, 10 min), DB-backed sessions in httpOnly cookies, separate admin sessions with lockout. `src/proxy.ts` is an optimistic gate; layouts and every API route re-check. |
+| Shared types | `src/lib/domain/types.ts`. Public (buyer) DTOs never include seller contact or bank details. |
 
-## Folder map
+State rules, fee tiers (1.5% up to ₦50,000, 2% above; paid by the seller) and time defaults follow the project documentation. Settings editable by admins: review window, unpaid expiry, dispute response time.
 
-- `src/app/` - Next.js App Router pages and global styles.
-- `src/components/brand/` - shared logo, Paga attribution, brand pills and social labels.
-- `src/components/ui/` - shadcn/ui primitives, restyled to the PaySafr tokens.
-- `src/lib/` - typed domain rules, formatting, mock store and API adapters (built in later phases).
-- `src/content/` - shared UI copy and reference content (built in later phases).
-- `public/brand/` - cleaned, web-ready brand marks and visual references.
-- `public/fonts/` - local prototype fonts.
-- `design-assets/` - source materials extracted for reference. It is not in `public/` and is never served.
+## Decisions where the blueprint and plan differed or were silent
 
-## Mocks and backend integration
+- **Project documentation wins.** Disputes can be opened by either side; a buyer can also dispute a *pending* milestone after the delivery deadline (documentation section 12: missed deadline means a refund can be requested).
+- **Plain SQL + `pg` instead of an ORM.** Money code needs explicit row locks (`FOR UPDATE`), triggers and deferred constraints; plain SQL keeps that visible and reviewable.
+- **Change requests:** capped at two per milestone; the seller can re-deliver, which restarts the review window.
+- **Milestones settle in order:** the next milestone can be delivered only after the previous one is released or refunded.
+- **Overpayment / late payment:** recorded, flagged, and refundable from the admin order page ("Refund unallocated funds"). Crediting an overpayment to the order is not offered.
+- **Trust score:** weights from the documentation with the response-time component omitted until tracked (others rescaled); "New" until three qualifying orders; only released orders of at least ₦1,000 whose buyer contact differs from the seller's count.
+- **Seller name** is shown to buyers as entered at sign-up.
 
-The UI will use a typed API layer in `src/lib/api/`, with seeded mock data and scenario state in `src/lib/mocks/`. Screens will call the API layer rather than importing mock data or calling `fetch` themselves. The mock adapter will persist the interactive demo in `sessionStorage`.
+## Not done yet (be aware before launch)
 
-The backend connection will be selected through `.env.local`:
+- **Paga integration.** There is no Paga sandbox access or API specification in this project, so collections, payout and webhook verification are implemented against the `PaymentProvider` interface with a simulator. `POST /api/webhooks/paga` deliberately returns 501. Items to confirm with Paga are listed in the documentation, section 8.5.
+- **Bank account name verification** needs a resolver; sellers type the account name and it is saved unverified.
+- **File uploads** for proof and evidence (links and notes only for now).
+- SMS/WhatsApp notifications, seller identity verification, buyer standing for repeated false disputes, admin seller-detail page.
+- **Licensing:** holding customer funds in Nigeria needs licensed infrastructure (documentation section 8.6). This is not legal advice.
+- The Degular and Halfre fonts in `public/fonts` are demo/personal-use licences. Obtain commercial licences before launch (see `src/app/layout.tsx`).
 
-```dotenv
-NEXT_PUBLIC_USE_MOCKS=true
-NEXT_PUBLIC_API_BASE_URL=
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXT_PUBLIC_SHOW_API_PLACEHOLDERS=true
-NEXT_PUBLIC_FEE_RATE=0.02
-NEXT_PUBLIC_SHOW_SOCIAL_PROOF=false
-```
+## Security notes
 
-Copy `.env.example` to `.env.local` for local overrides. Use `NEXT_PUBLIC_USE_MOCKS=false` and provide the backend base URL to switch to the typed HTTP adapter once endpoints are ready. Paga credentials and other secrets must remain on the backend; they do not belong in this frontend.
-
-The development scenario switcher will be available from the UI when the buyer flow is built. API placeholder tags will identify backend work still represented by mocks.
-
-## Brand and type
-
-Brand tokens live in `src/app/globals.css`: Dark Green `#112b00`, Light Green `#66ff00`, Dark Grey `#666666`, Light Grey `#cccccc`, White and Black. Danger and warning tones are isolated in their own tokens. The MVP uses the light theme only. shadcn/ui is initialized with the Radix and Lucide foundations; feature-specific primitives are added as those flows are implemented.
-
-Halfre is used for display headings and the wordmark. Degular Demo is used for body text at regular, medium, semibold and bold weights. Both are local prototype assets. Degular Demo is marked Personal Use Only; obtain a commercial license before public launch. The font stacks use Inter as the fallback for glyphs absent from the demo font files. Money values use the `.money` class and tabular numerals.
-
-`design-assets/` retains the source logo, font and visual reference materials. The small SVG marks in `public/brand/` are cleaned/cropped versions for web use. The live-text lockup is a prototype and should be compared with the supplied wordmark reference before launch.
-
-## Share action handler wiring
-
-`ShareActions` will expose `onWhatsApp`, `onInstagram`, `onDownload` and `onCopyLink` callbacks. Plug the template work in by passing the matching handler at each receipt or invoice placement. Until then, each visible action shows a “Coming soon” notice instead of silently doing nothing.
-
-## Open decisions for handover
-
-- Fee is currently configured at the prompt's provisional default of 2%; the final fee is still to be confirmed.
-- Receipt and invoice artwork, Paga Engine attribution artwork, legal copy, live social links and approval of danger/warning colors remain external inputs.
-- A full Degular commercial license is needed before commercial release.
+Secrets live only in environment variables. API keys never reach the client. Cookies are httpOnly (`__Host-` prefixed in production). Payment link tokens are 256-bit random values. Passwords use bcrypt cost 12. All state-changing requests require a same-origin `Origin`. Rate limits are stored in Postgres, so they hold across serverless instances.

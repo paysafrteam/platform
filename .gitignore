@@ -42,3 +42,6 @@ yarn-error.log*
 next-env.d.ts
 
 design-assets/PaySafr Assets - Frontend/UI References/
+
+# local email outbox (dev only)
+/.dev-outbox/
