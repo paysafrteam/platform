@@ -9,6 +9,8 @@ import { qualifyingOrders, QUALIFYING_MIN_ORDERS } from "@/server/services/trust
 import { nigerianBanks } from "@/content/nigerian-banks";
 import type { DashboardData, IncomeData, Notification, PayoutAccount, PublicInvoice, TrustData, TrustLevel } from "@/lib/domain/types";
 import type { SessionUser } from "@/server/auth/session";
+import { validatePagaBankAccount } from "@/server/payments/paga";
+import { env } from "@/server/env";
 
 /** Last `count` Lagos calendar months (Lagos is UTC+1 with no DST), oldest first. */
 export function lastMonths(now: Date, count = 6): { month: string; label: string }[] {
@@ -85,25 +87,36 @@ export async function markNotificationsRead(userId: string, ids?: string[]) {
 
 export const listBanks = () => nigerianBanks;
 
-export function resolveBank(input: { bankCode: string; accountNumber: string }) {
+export async function resolveBank(input: { bankCode: string; accountNumber: string }) {
   if (!/^\d{10}$/.test(input.accountNumber)) throw new AppError("VALIDATION", "Enter a 10-digit account number.", { accountNumber: "Enter a 10-digit account number." });
   if (!nigerianBanks.some((b) => b.code === input.bankCode)) throw new AppError("VALIDATION", "Choose a bank from the list.", { bankCode: "Choose a bank." });
+  if (env().BANK_RESOLVER === "paga") {
+    const resolved = await validatePagaBankAccount(input);
+    return { accountName: resolved.accountName, verified: true, manual: false as const };
+  }
   return { accountName: null, verified: false, manual: true as const };
 }
 
 export async function savePayoutAccount(user: SessionUser, input: { bankCode: string; accountNumber: string; accountName: string }, ip: string): Promise<PayoutAccount> {
   const bank = nigerianBanks.find((b) => b.code === input.bankCode);
   if (!bank) throw new AppError("VALIDATION", "Choose a bank from the list.", { bankCode: "Choose a bank." });
+  let accountName = input.accountName.trim();
+  let verified = false;
+  if (env().BANK_RESOLVER === "paga") {
+    const resolved = await validatePagaBankAccount({ bankCode: input.bankCode, accountNumber: input.accountNumber });
+    accountName = resolved.accountName;
+    verified = true;
+  }
   const prev = await q1<{ account_number: string; bank_code: string }>(undefined, "SELECT account_number, bank_code FROM payout_accounts WHERE user_id=$1", [user.id]);
-  await q(undefined, `INSERT INTO payout_accounts (user_id, bank_code, bank_name, account_number, account_name, verified) VALUES ($1,$2,$3,$4,$5,false)
+  await q(undefined, `INSERT INTO payout_accounts (user_id, bank_code, bank_name, account_number, account_name, verified, verified_at) VALUES ($1,$2,$3,$4,$5,$6,CASE WHEN $6 THEN now() ELSE NULL END)
     ON CONFLICT (user_id) DO UPDATE SET bank_code=EXCLUDED.bank_code, bank_name=EXCLUDED.bank_name, account_number=EXCLUDED.account_number,
-      account_name=EXCLUDED.account_name, verified=false, verified_at=NULL, updated_at=now()`, [user.id, bank.code, bank.name, input.accountNumber, input.accountName.trim()]);
+      account_name=EXCLUDED.account_name, verified=EXCLUDED.verified, verified_at=EXCLUDED.verified_at, updated_at=now()`, [user.id, bank.code, bank.name, input.accountNumber, accountName, verified]);
   const mask = (n?: string) => (n ? `******${n.slice(-4)}` : null);
   await writeAudit(undefined, { actorType: "user", actorId: user.id, actorLabel: user.email.replace(/^(.).*(@.*)$/, "$1***$2"), action: "payout_account.changed",
     targetType: "user", targetId: user.id, before: { account: mask(prev?.account_number), bank: prev?.bank_code }, after: { account: mask(input.accountNumber), bank: bank.code }, ip });
   await sendEmail({ to: user.email, template: "payout_account_changed", content: notification("Payout account changed",
     `Your PaySafr payout account was set to ${bank.name} ending ${input.accountNumber.slice(-4)}. If this was not you, change your password and contact support now.`) });
-  return { bankCode: bank.code, bankName: bank.name, accountNumber: input.accountNumber, accountName: input.accountName.trim(), verified: false };
+  return { bankCode: bank.code, bankName: bank.name, accountNumber: input.accountNumber, accountName, verified };
 }
 
 export async function listInvoices(sellerId: string): Promise<PublicInvoice[]> {

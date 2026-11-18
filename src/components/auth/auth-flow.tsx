@@ -316,7 +316,6 @@ export function AuthFlow({ page }: { page: AuthPageName }) {
                 setAccountVerified,
                 busy,
                 savePayout,
-                setError,
                 router,
               }}
             />
@@ -639,7 +638,6 @@ function Onboarding({
   setAccountVerified,
   busy,
   savePayout,
-  setError,
   router,
 }: {
   step: number;
@@ -656,7 +654,6 @@ function Onboarding({
   setAccountVerified: (v: boolean) => void;
   busy: boolean;
   savePayout: () => void;
-  setError: (v: string) => void;
   router: ReturnType<typeof useRouter>;
 }) {
   return (

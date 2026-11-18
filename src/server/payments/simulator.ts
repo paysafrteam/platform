@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { env } from "@/server/env";
 import type { PaymentProvider } from "@/server/payments/provider";
+import { pagaProvider } from "@/server/payments/paga";
 
 /** Sandbox rail. Clearly fake account details; funding goes through the same recordFunding() Paga will call. */
 export const simulator: PaymentProvider = {
@@ -27,6 +28,6 @@ export const simulator: PaymentProvider = {
 };
 
 export function getPaymentProvider(): PaymentProvider {
-  if (env().PAYMENT_MODE !== "simulator") throw new Error("Only PAYMENT_MODE=simulator is supported until the Paga integration ships.");
+  if (env().PAYMENT_MODE === "paga") return pagaProvider;
   return simulator;
 }

@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { withApi } from "@/server/http/withApi";
 import { q } from "@/server/db";
 import { clearCookie, userCookieName } from "@/server/auth/session";

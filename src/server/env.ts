@@ -13,8 +13,12 @@ const schema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   EMAIL_FROM: z.string().default("PaySafr <no-reply@paysafr.local>"),
-  PAYMENT_MODE: z.literal("simulator").default("simulator"),
-  BANK_RESOLVER: z.literal("manual").default("manual"),
+  PAYMENT_MODE: z.enum(["simulator", "paga"]).default("simulator"),
+  BANK_RESOLVER: z.enum(["manual", "paga"]).default("manual"),
+  PAGA_ENV: z.enum(["sandbox", "live"]).default("sandbox"),
+  PAGA_PUBLIC_KEY: z.string().optional(),
+  PAGA_SECRET_KEY: z.string().optional(),
+  PAGA_HASH_KEY: z.string().optional(),
   SIMULATOR_FAIL_PAYOUTS: z.enum(["true", "false"]).default("false"),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(5),
 });
@@ -31,6 +35,9 @@ export function env(): Env {
     throw new Error(`Invalid environment configuration:\n - ${names.join("\n - ")}`);
   }
   const e = parsed.data;
+  if (e.PAYMENT_MODE === "paga" && (!e.PAGA_PUBLIC_KEY || !e.PAGA_SECRET_KEY || !e.PAGA_HASH_KEY)) {
+    throw new Error("PAGA_PUBLIC_KEY, PAGA_SECRET_KEY, and PAGA_HASH_KEY are required when PAYMENT_MODE=paga");
+  }
   if (e.NEXT_PUBLIC_APP_ENV === "production" && !(e.SMTP_HOST && e.SMTP_USER && e.SMTP_PASS)) {
     throw new Error("Invalid environment configuration: SMTP_HOST, SMTP_USER and SMTP_PASS are required in production.");
   }
