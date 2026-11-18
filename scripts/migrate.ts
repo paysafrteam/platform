@@ -1,11 +1,20 @@
 import fs from "node:fs";
 import path from "node:path";
+import nextEnv from "@next/env";
 import { Client } from "pg";
+
+nextEnv.loadEnvConfig(process.cwd());
 
 async function main() {
   const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL (or DATABASE_URL_UNPOOLED) is required.");
-  const client = new Client({ connectionString: url });
+  const ssl = process.env.DB_SSL === "false"
+    ? false
+    : process.env.DB_SSL === "true" || process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: true }
+      : undefined;
+  const clientConfig = { connectionString: url, connectionTimeoutMillis: 10_000 };
+  const client = new Client(ssl === undefined ? clientConfig : { ...clientConfig, ssl });
   await client.connect();
   await client.query("CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())");
   const dir = path.join(process.cwd(), "db", "migrations");

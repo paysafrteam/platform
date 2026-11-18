@@ -7,7 +7,15 @@ async function main() {
   const reset = process.argv.includes("--reset");
   if (!email || !password) throw new Error("ADMIN_SEED_EMAIL and ADMIN_SEED_PASSWORD are required.");
   if (password.length < 8) throw new Error("ADMIN_SEED_PASSWORD must be at least 8 characters.");
-  const client = new Client({ connectionString: process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL });
+  const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL (or DATABASE_URL_UNPOOLED) is required.");
+  const ssl = process.env.DB_SSL === "false"
+    ? false
+    : process.env.DB_SSL === "true" || process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: true }
+      : undefined;
+  const clientConfig = { connectionString: url, connectionTimeoutMillis: 10_000 };
+  const client = new Client(ssl === undefined ? clientConfig : { ...clientConfig, ssl });
   await client.connect();
   const hash = await bcrypt.hash(password, 12);
   const existing = await client.query("SELECT id FROM admin_users WHERE lower(email)=$1", [email]);

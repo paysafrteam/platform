@@ -1,7 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { q, q1, type Db } from "@/server/db";
-import { isProd } from "@/server/env";
+import { secureCookies } from "@/server/env";
 import { randomToken, sha256Hex } from "@/server/ids";
 import { AppError } from "@/server/http/errors";
 
@@ -9,7 +9,7 @@ export const USER_COOKIE = "ps_session";
 export const ADMIN_COOKIE = "ps_admin";
 const USER_TTL_S = 30 * 24 * 3600;
 const ADMIN_TTL_S = 8 * 3600;
-const cookieName = (n: string) => (isProd() ? `__Host-${n}` : n);
+const cookieName = (n: string) => (secureCookies() ? `__Host-${n}` : n);
 export const userCookieName = () => cookieName(USER_COOKIE);
 export const adminCookieName = () => cookieName(ADMIN_COOKIE);
 
@@ -24,7 +24,7 @@ export async function createUserSession(userId: string, ip: string, ua: string |
   await q(db, `INSERT INTO sessions (user_id, token_hash, expires_at, ip, user_agent) VALUES ($1,$2, now() + make_interval(secs => $3), $4, $5)`,
     [userId, sha256Hex(token), USER_TTL_S, ip, ua?.slice(0, 300) ?? null]);
   (await cookies()).set(userCookieName(), token, {
-    httpOnly: true, sameSite: "lax", secure: isProd(), path: "/", maxAge: USER_TTL_S,
+    httpOnly: true, sameSite: "lax", secure: secureCookies(), path: "/", maxAge: USER_TTL_S,
   });
 }
 
@@ -33,7 +33,7 @@ export async function createAdminSession(adminId: string, ip: string, ua: string
   await q(db, `INSERT INTO admin_sessions (admin_id, token_hash, expires_at, ip, user_agent) VALUES ($1,$2, now() + make_interval(secs => $3), $4, $5)`,
     [adminId, sha256Hex(token), ADMIN_TTL_S, ip, ua?.slice(0, 300) ?? null]);
   (await cookies()).set(adminCookieName(), token, {
-    httpOnly: true, sameSite: "strict", secure: isProd(), path: "/", maxAge: ADMIN_TTL_S,
+    httpOnly: true, sameSite: "strict", secure: secureCookies(), path: "/", maxAge: ADMIN_TTL_S,
   });
 }
 

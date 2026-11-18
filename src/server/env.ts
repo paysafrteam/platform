@@ -3,8 +3,10 @@ import { z } from "zod";
 
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
+  DB_SSL: z.enum(["true", "false"]).optional(),
   NEXT_PUBLIC_APP_URL: z.string().url(),
   NEXT_PUBLIC_APP_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+  COOKIE_SECURE: z.enum(["true", "false"]).optional(),
   OTP_PEPPER: z.string().min(32, "must be at least 32 characters"),
   CRON_SECRET: z.string().min(32, "must be at least 32 characters"),
   SMTP_HOST: z.string().optional(),
@@ -46,4 +48,5 @@ export function env(): Env {
 }
 
 export const isProd = () => env().NEXT_PUBLIC_APP_ENV === "production";
+export const secureCookies = () => env().COOKIE_SECURE === undefined ? isProd() : env().COOKIE_SECURE === "true";
 export const emailConfigured = () => Boolean(env().SMTP_HOST && env().SMTP_USER && env().SMTP_PASS);

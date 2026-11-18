@@ -10,8 +10,23 @@ const g = globalThis as unknown as { __psPool?: Pool };
 
 export function pool(): Pool {
   if (!g.__psPool) {
-    g.__psPool = new Pool({ connectionString: env().DATABASE_URL, max: env().DB_POOL_MAX });
-    g.__psPool.on("error", (e) => console.error("[db] idle client error", e.message));
+    const config = env();
+    const ssl = config.DB_SSL === "false"
+      ? false
+      : config.DB_SSL === "true" || process.env.NODE_ENV === "production"
+        ? { rejectUnauthorized: true }
+        : undefined;
+    const poolConfig = {
+      connectionString: config.DATABASE_URL,
+      max: config.DB_POOL_MAX,
+      connectionTimeoutMillis: 10_000,
+      idleTimeoutMillis: 30_000,
+    };
+    g.__psPool = new Pool(ssl === undefined ? poolConfig : { ...poolConfig, ssl });
+    g.__psPool.on("error", (e) => {
+      const code = "code" in e && typeof e.code === "string" ? e.code : "unknown";
+      console.error(`[db] idle client error (${code})`);
+    });
   }
   return g.__psPool;
 }

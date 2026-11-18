@@ -27,7 +27,15 @@ async function main() {
   if (a !== b) throw new Error("Passwords do not match.");
   if (a.length < 8) throw new Error("Password must be at least 8 characters.");
   if (a.length < 10) console.warn("Warning: use at least 10 characters for an admin password.");
-  const client = new Client({ connectionString: process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL });
+  const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL (or DATABASE_URL_UNPOOLED) is required.");
+  const ssl = process.env.DB_SSL === "false"
+    ? false
+    : process.env.DB_SSL === "true" || process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: true }
+      : undefined;
+  const clientConfig = { connectionString: url, connectionTimeoutMillis: 10_000 };
+  const client = new Client(ssl === undefined ? clientConfig : { ...clientConfig, ssl });
   await client.connect();
   const r = await client.query("UPDATE admin_users SET password_hash=$2, password_changed_at=now(), failed_attempts=0, locked_until=NULL, updated_at=now() WHERE lower(email)=$1 RETURNING id", [email, await bcrypt.hash(a, 12)]);
   if (!r.rowCount) throw new Error("No admin with that email.");

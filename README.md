@@ -19,6 +19,8 @@ npm run dev                         # http://localhost:3000
 - On a payment page in sandbox, **Simulate this bank transfer** stands in for the buyer's bank transfer.
 - Background jobs (expire unpaid orders, reminders, auto-release, payout retries): call `POST /api/cron/tick` with `Authorization: Bearer $CRON_SECRET` every 1 to 5 minutes (GitHub Actions, cron-job.org, Vercel Cron), or run `npm run jobs:tick` locally.
 
+For production, run `npm run db:migrate` manually against the production database before starting the new app version. Set `DATABASE_URL_UNPOOLED` to the provider's direct connection URL when available; migrations are deliberately not run during build or startup.
+
 Scripts: `npm test` (needs a `paysafr_test` database, see below), `npm run lint`, `npm run typecheck`, `npm run build`, `npm run admin:set-password -- <email>`.
 
 Tests: `createdb paysafr_test` then `TEST_DATABASE_URL=postgres://... npm test`. The suite drops and recreates the `public` schema of that database, so never point it at real data.
