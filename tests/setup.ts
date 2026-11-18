@@ -1,4 +1,7 @@
-process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? "postgres://paysafr:PaySafrTeam100@localhost:5432/paysafr_test";
+if (!process.env.TEST_DATABASE_URL) {
+  throw new Error("TEST_DATABASE_URL is required; use a dedicated disposable database, never production.");
+}
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
 process.env.NEXT_PUBLIC_APP_ENV = "sandbox";
 process.env.OTP_PEPPER = "test-pepper-test-pepper-test-pepper-1234";

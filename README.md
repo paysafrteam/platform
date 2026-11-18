@@ -7,23 +7,28 @@ Next.js 16 (App Router, Cache Components) + PostgreSQL. Money is integer kobo ev
 ## Run it locally
 
 ```bash
-cp .env.example .env.local          # fill in DATABASE_URL, OTP_PEPPER, CRON_SECRET (openssl rand -hex 32)
+cp .env.example .env.local          # add URLs from a non-production Neon branch and generate OTP_PEPPER / CRON_SECRET
 npm install
 npm run db:migrate                  # applies db/migrations/*.sql
-ADMIN_SEED_EMAIL=you@x.com ADMIN_SEED_PASSWORD='a-long-password' npm run seed:admin
+# set ADMIN_SEED_EMAIL and ADMIN_SEED_PASSWORD temporarily in .env.local, then:
+npm run seed:admin
 npm run dev                         # http://localhost:3000
 ```
 
+- `DATABASE_URL` must be the pooled Neon URL. Use a non-production Neon branch for local development. `DATABASE_URL_UNPOOLED`, when set, must be the direct URL for the same Neon branch. Production startup and database administration scripts reject non-Neon URLs.
+- Admin sign-in uses the `admin_users` and `admin_sessions` tables in this same database. Run `npm run seed:admin` once after migration; use `npm run admin:set-password -- <email>` to reset an existing admin password. Remove `ADMIN_SEED_PASSWORD` from `.env.local` after seeding.
 - Sign up as a seller at `/get-started`. With no SMTP configured in sandbox, the verification code is written to `.dev-outbox/*.json`.
 - Admin console: `/admin/sign-in`.
 - On a payment page in sandbox, **Simulate this bank transfer** stands in for the buyer's bank transfer.
 - Background jobs (expire unpaid orders, reminders, auto-release, payout retries): call `POST /api/cron/tick` with `Authorization: Bearer $CRON_SECRET` every 1 to 5 minutes (GitHub Actions, cron-job.org, Vercel Cron), or run `npm run jobs:tick` locally.
 
-For production, run `npm run db:migrate` manually against the production database before starting the new app version. Set `DATABASE_URL_UNPOOLED` to the provider's direct connection URL when available; migrations are deliberately not run during build or startup.
+For production, run `npm run db:migrate` manually against the production Neon branch before starting the new app version. Set `DATABASE_URL_UNPOOLED` to the direct connection URL from that same branch; migrations are deliberately not run during build or startup. The migration creates the schema, including `admin_users` and `admin_sessions`; seed the first admin once afterward.
 
-Scripts: `npm test` (needs a `paysafr_test` database, see below), `npm run lint`, `npm run typecheck`, `npm run build`, `npm run admin:set-password -- <email>`.
+The build requires `NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_APP_ENV` because Next.js embeds `NEXT_PUBLIC_*` values into browser assets. Production startup refuses simulator payments and non-live Paga configuration. For an HTTP demo use `NEXT_PUBLIC_APP_ENV=sandbox`; use `PAYMENT_MODE=paga` only with Paga sandbox credentials and a callback URL the provider accepts, or use the simulator. Set `COOKIE_SECURE=true` and use HTTPS before real users or payments. Production also needs SMTP, Paga live credentials, and a scheduled `POST /api/cron/tick` call every 1 to 5 minutes over HTTPS with the `CRON_SECRET`.
 
-Tests: `createdb paysafr_test` then `TEST_DATABASE_URL=postgres://... npm test`. The suite drops and recreates the `public` schema of that database, so never point it at real data.
+Scripts: `npm test` (requires a dedicated `TEST_DATABASE_URL`, see below), `npm run lint`, `npm run typecheck`, `npm run build`, `npm run admin:set-password -- <email>`.
+
+Tests: set `TEST_DATABASE_URL` to a dedicated disposable PostgreSQL test database (for example, a separate Neon branch), then run `npm test`. The suite drops and recreates the `public` schema, so never point it at the production Neon database.
 
 ## Architecture
 
@@ -31,7 +36,7 @@ Tests: `createdb paysafr_test` then `TEST_DATABASE_URL=postgres://... npm test`.
 | --- | --- |
 | Schema and constraints | `db/migrations/0001_init.sql` (ledger and audit log are append-only via triggers; a trigger refuses any ledger entry that would take an order's held balance below zero) |
 | Money services | `src/server/services/` : `funding` (the only code that credits an order), `settlement` (release), `disputes`, `payouts`, `jobs`, `trust`, `receipts`, `orders`, `admin` |
-| Payment rail | `src/server/payments/provider.ts` interface, `simulator.ts` implementation. Nothing else may talk to Paga. |
+| Payment rail | `src/server/payments/provider.ts` interface, `simulator.ts` sandbox implementation, and `paga.ts` adapter with a Paga webhook route. |
 | HTTP | `src/app/api/**/route.ts`, all wrapped by `withApi` (Origin check, zod validation, auth, rate limits, uniform errors) |
 | Auth | Email + password, 6-digit emailed OTP (hashed, 5 attempts, 10 min), DB-backed sessions in httpOnly cookies, separate admin sessions with lockout. `src/proxy.ts` is an optimistic gate; layouts and every API route re-check. |
 | Shared types | `src/lib/domain/types.ts`. Public (buyer) DTOs never include seller contact or bank details. |
@@ -50,8 +55,8 @@ State rules, fee tiers (1.5% up to ₦50,000, 2% above; paid by the seller) and 
 
 ## Not done yet (be aware before launch)
 
-- **Paga integration.** There is no Paga sandbox access or API specification in this project, so collections, payout and webhook verification are implemented against the `PaymentProvider` interface with a simulator. `POST /api/webhooks/paga` deliberately returns 501. Items to confirm with Paga are listed in the documentation, section 8.5.
-- **Bank account name verification** needs a resolver; sellers type the account name and it is saved unverified.
+- **Paga integration is not provider-verified.** A Paga adapter and signed-webhook handler exist, but this project has not validated their request, callback, payout, refund, or signature formats against Paga's current documentation or sandbox. Do not enable live payments until Paga confirms the integration and it passes sandbox tests.
+- **Bank account name verification** is optional via `BANK_RESOLVER=paga`; with the default manual resolver, sellers type the account name and it is saved unverified.
 - **File uploads** for proof and evidence (links and notes only for now).
 - SMS/WhatsApp notifications, seller identity verification, buyer standing for repeated false disputes, admin seller-detail page.
 - **Licensing:** holding customer funds in Nigeria needs licensed infrastructure (documentation section 8.6). This is not legal advice.

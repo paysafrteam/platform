@@ -1,5 +1,9 @@
 import bcrypt from "bcryptjs";
+import { loadEnvConfig } from "@next/env";
 import { Client } from "pg";
+import { assertNeonDatabaseUrl } from "../src/server/db-url";
+
+loadEnvConfig(process.cwd());
 
 function promptHidden(label: string): Promise<string> {
   return new Promise((resolve) => {
@@ -29,6 +33,7 @@ async function main() {
   if (a.length < 10) console.warn("Warning: use at least 10 characters for an admin password.");
   const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL (or DATABASE_URL_UNPOOLED) is required.");
+  assertNeonDatabaseUrl(url, process.env.DATABASE_URL_UNPOOLED ? "DATABASE_URL_UNPOOLED" : "DATABASE_URL");
   const ssl = process.env.DB_SSL === "false"
     ? false
     : process.env.DB_SSL === "true" || process.env.NODE_ENV === "production"

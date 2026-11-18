@@ -1,5 +1,9 @@
 import bcrypt from "bcryptjs";
+import { loadEnvConfig } from "@next/env";
 import { Client } from "pg";
+import { assertNeonDatabaseUrl } from "../src/server/db-url";
+
+loadEnvConfig(process.cwd());
 
 async function main() {
   const email = (process.env.ADMIN_SEED_EMAIL ?? "").trim().toLowerCase();
@@ -9,6 +13,7 @@ async function main() {
   if (password.length < 8) throw new Error("ADMIN_SEED_PASSWORD must be at least 8 characters.");
   const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL (or DATABASE_URL_UNPOOLED) is required.");
+  assertNeonDatabaseUrl(url, process.env.DATABASE_URL_UNPOOLED ? "DATABASE_URL_UNPOOLED" : "DATABASE_URL");
   const ssl = process.env.DB_SSL === "false"
     ? false
     : process.env.DB_SSL === "true" || process.env.NODE_ENV === "production"

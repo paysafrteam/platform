@@ -4,15 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
-    "build": "next build",
+    "build": "node scripts/build.mjs",
     "start": "node scripts/start.mjs",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.json\" \"README.md\"",
     "db:migrate": "tsx scripts/migrate.ts",
-    "seed:admin": "tsx --env-file=.env.local scripts/seed-admin.ts",
-    "admin:set-password": "tsx --env-file=.env.local scripts/set-admin-password.ts",
-    "jobs:tick": "tsx --env-file=.env.local --conditions react-server scripts/tick.ts",
+    "seed:admin": "tsx scripts/seed-admin.ts",
+    "admin:set-password": "tsx scripts/set-admin-password.ts",
+    "jobs:tick": "tsx --conditions react-server scripts/tick.ts",
     "test": "vitest run"
   },
   "dependencies": {

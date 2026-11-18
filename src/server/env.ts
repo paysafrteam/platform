@@ -1,8 +1,10 @@
 import "server-only";
 import { z } from "zod";
+import { isNeonDatabaseUrl } from "@/server/db-url";
 
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
+  DATABASE_URL_UNPOOLED: z.string().optional(),
   DB_SSL: z.enum(["true", "false"]).optional(),
   NEXT_PUBLIC_APP_URL: z.string().url(),
   NEXT_PUBLIC_APP_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
@@ -37,6 +39,14 @@ export function env(): Env {
     throw new Error(`Invalid environment configuration:\n - ${names.join("\n - ")}`);
   }
   const e = parsed.data;
+  if (process.env.NODE_ENV === "production") {
+    if (!isNeonDatabaseUrl(e.DATABASE_URL)) {
+      throw new Error("Invalid environment configuration: production DATABASE_URL must point to Neon PostgreSQL.");
+    }
+    if (e.DATABASE_URL_UNPOOLED && !isNeonDatabaseUrl(e.DATABASE_URL_UNPOOLED)) {
+      throw new Error("Invalid environment configuration: production DATABASE_URL_UNPOOLED must point to Neon PostgreSQL.");
+    }
+  }
   if (e.PAYMENT_MODE === "paga" && (!e.PAGA_PUBLIC_KEY || !e.PAGA_SECRET_KEY || !e.PAGA_HASH_KEY)) {
     throw new Error("PAGA_PUBLIC_KEY, PAGA_SECRET_KEY, and PAGA_HASH_KEY are required when PAYMENT_MODE=paga");
   }

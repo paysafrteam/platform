@@ -1,13 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import nextEnv from "@next/env";
+import { loadEnvConfig } from "@next/env";
 import { Client } from "pg";
+import { assertNeonDatabaseUrl } from "../src/server/db-url";
 
-nextEnv.loadEnvConfig(process.cwd());
+loadEnvConfig(process.cwd());
 
 async function main() {
   const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL (or DATABASE_URL_UNPOOLED) is required.");
+  assertNeonDatabaseUrl(url, process.env.DATABASE_URL_UNPOOLED ? "DATABASE_URL_UNPOOLED" : "DATABASE_URL");
   const ssl = process.env.DB_SSL === "false"
     ? false
     : process.env.DB_SSL === "true" || process.env.NODE_ENV === "production"
