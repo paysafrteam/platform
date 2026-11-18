@@ -6,6 +6,36 @@ import { lastMonths } from "@/server/services/workspace";
 import { generateCode, hashCode } from "@/server/otp/service";
 import { normalizeNgPhone, safeNext } from "@/lib/auth-utils";
 import { passwordProblem } from "@/server/auth/password";
+import { isAllowedOrigin } from "@/server/http/withApi";
+
+describe("API origin validation", () => {
+  const appUrl = "https://paysafr.example";
+
+  it("accepts a matching Origin", () => {
+    const headers = new Headers({ host: "paysafr.example", origin: "https://paysafr.example" });
+    expect(isAllowedOrigin(headers, appUrl)).toBe(true);
+  });
+
+  it("accepts a same-host Referer only when Origin is absent", () => {
+    const headers = new Headers({ host: "paysafr.example", referer: "https://paysafr.example/sign-in" });
+    expect(isAllowedOrigin(headers, appUrl)).toBe(true);
+    headers.set("origin", "https://attacker.example");
+    expect(isAllowedOrigin(headers, appUrl)).toBe(false);
+  });
+
+  it("rejects foreign, malformed, or missing origin information", () => {
+    expect(isAllowedOrigin(new Headers({
+      host: "paysafr.example",
+      referer: "https://attacker.example/sign-in",
+    }), appUrl)).toBe(false);
+    expect(isAllowedOrigin(new Headers({
+      host: "paysafr.example",
+      origin: "null",
+      referer: "https://paysafr.example/sign-in",
+    }), appUrl)).toBe(false);
+    expect(isAllowedOrigin(new Headers({ host: "paysafr.example" }), appUrl)).toBe(false);
+  });
+});
 
 describe("fees and allocation", () => {
   it("uses 1.5% up to ₦50,000 and 2% above, by order total", () => {

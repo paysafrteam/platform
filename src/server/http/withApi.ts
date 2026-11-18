@@ -36,13 +36,27 @@ function fieldErrors(error: z.ZodError): Record<string, string> {
   return out;
 }
 
-function checkOrigin(req: NextRequest) {
-  const origin = req.headers.get("origin");
-  if (!origin) throw new AppError("FORBIDDEN", "Request blocked.");
+export function isAllowedOrigin(headers: Headers, appUrl: string): boolean {
+  const origin = headers.get("origin");
+  // A same-host Referer is a fallback only when Origin is absent, never when it is invalid.
+  const source = origin ?? headers.get("referer");
+  if (!source) return false;
+
   let host: string;
-  try { host = new URL(origin).host; } catch { throw new AppError("FORBIDDEN", "Request blocked."); }
-  const allowed = new Set([req.headers.get("host"), new URL(env().NEXT_PUBLIC_APP_URL).host]);
-  if (!allowed.has(host)) throw new AppError("FORBIDDEN", "Request blocked.");
+  let appHost: string;
+  try {
+    host = new URL(source).host;
+    appHost = new URL(appUrl).host;
+  } catch {
+    return false;
+  }
+  return new Set([headers.get("host"), appHost]).has(host);
+}
+
+function checkOrigin(req: NextRequest) {
+  if (!isAllowedOrigin(req.headers, env().NEXT_PUBLIC_APP_URL)) {
+    throw new AppError("FORBIDDEN", "Request blocked.");
+  }
 }
 
 export function withApi<B = undefined, Q = undefined, A extends "none" | "user" | "admin" = "none">(
