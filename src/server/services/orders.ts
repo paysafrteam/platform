@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { q, q1, withTx } from "@/server/db";
 import { AppError } from "@/server/http/errors";
 import { rateLimit } from "@/server/http/ratelimit";
@@ -11,6 +12,7 @@ import { emailBuyer, notify } from "@/server/services/notifications";
 import { allocateMilestoneFees, isMilestoneAllocationValid } from "@/lib/domain/rules";
 import { normalizeNgPhone } from "@/lib/auth-utils";
 import { processPayout } from "@/server/services/payouts";
+import { reconcilePagaPaymentRequest } from "@/server/services/paga-reconciliation";
 import { formatNaira } from "@/lib/format/money";
 import type { PublicOrder, SellerOrder } from "@/lib/domain/types";
 import type { SessionUser } from "@/server/auth/session";
@@ -71,15 +73,169 @@ export async function publishOrder(user: SessionUser, orderId: string): Promise<
 
   const expiresAt = new Date(Date.now() + settings.unpaid_expiry_hours * 3_600_000);
   const total = (await q1<{ total_kobo: number }>(undefined, "SELECT total_kobo FROM orders WHERE id=$1", [orderId]))!.total_kobo;
-  const account = await getPaymentProvider().createCollectionAccount({ orderId, amountKobo: total, reference: `PS-${orderId}`, expiresAt });
+  const provider = getPaymentProvider();
+  const account = provider.name === "paga"
+    ? null
+    : await provider.createCollectionAccount({ orderId, amountKobo: total, reference: `PS-${orderId}`, expiresAt });
   await withTx(async (tx) => {
     const { order } = await lockOrder(tx, orderId);
     if (order.status !== "draft") throw new AppError("INVALID_STATE", "Only a draft order can be published.");
     await q(tx, `UPDATE orders SET status='awaiting_payment', published_at=now(), expires_at=$2, order_account_bank=$3, order_account_number=$4,
       order_account_name=$5, order_account_expires_at=$2, updated_at=now() WHERE id=$1`,
-      [orderId, expiresAt, account.bankName, account.accountNumber, account.accountName]);
+      [orderId, expiresAt, account?.bankName ?? null, account?.accountNumber ?? null, account?.accountName ?? null]);
   });
   return getSellerOrder(user.id, orderId);
+}
+
+export async function createPagaPaymentAccount(
+  token: string,
+  contact: { phone?: string; email?: string } = {},
+): Promise<PublicOrder> {
+  await rateLimit({ key: `paga-account:${token}`, limit: 5, windowSeconds: 3600 });
+  const rawPhone = contact.phone?.trim();
+  const inputPhone = rawPhone ? normalizeNgPhone(rawPhone) : null;
+  if (rawPhone && !inputPhone) {
+    throw new AppError("VALIDATION", "Enter a valid Nigerian phone number.", { phone: "Enter a valid Nigerian phone number." });
+  }
+  const inputEmail = contact.email?.trim().toLowerCase() || null;
+  const provider = getPaymentProvider();
+  if (provider.name !== "paga") throw new AppError("NOT_FOUND", "This payment account is not available.");
+
+  const result = await withTx(async (tx) => {
+    const order = await q1<{
+      id: string;
+      status: string;
+      total_kobo: number;
+      buyer_email: string | null;
+      buyer_phone: string | null;
+      order_account_number: string | null;
+      order_account_expires_at: Date | null;
+      expires_at: Date | null;
+    }>(tx, `SELECT id, status, total_kobo, buyer_email, buyer_phone, order_account_number,
+        order_account_expires_at, expires_at
+      FROM orders WHERE token=$1 AND status <> 'draft' FOR UPDATE`, [token]);
+    if (!order) throw new AppError("NOT_FOUND", "We couldn't find this payment link.");
+    if (order.status !== "awaiting_payment" || !order.expires_at || order.expires_at.getTime() <= Date.now()) {
+      throw new AppError("INVALID_STATE", "This payment link is no longer active.");
+    }
+
+    const accountExpiry = order.order_account_expires_at ?? order.expires_at;
+    if (order.order_account_number && accountExpiry.getTime() > Date.now()) return { kind: "ready" as const };
+
+    await q(tx, `UPDATE paga_payment_requests SET status='expired', updated_at=now()
+      WHERE order_id=$1 AND status IN ('creating','pending') AND expires_at <= now()`, [order.id]);
+    if (order.order_account_number) {
+      await q(tx, `UPDATE orders SET order_account_bank=NULL, order_account_number=NULL, order_account_name=NULL,
+        order_account_expires_at=NULL, order_account_total_payment_kobo=NULL, updated_at=now() WHERE id=$1`, [order.id]);
+    }
+
+    const existing = await q1<{
+      status: string;
+      reference_number: string;
+      request_amount_kobo: number;
+      last_error: string | null;
+      created_at: Date;
+      bank_name: string | null;
+      account_number: string | null;
+      account_name: string | null;
+      total_payment_amount_kobo: number | null;
+      expires_at: Date;
+    }>(tx, `SELECT status, reference_number, request_amount_kobo, last_error, created_at, bank_name,
+        account_number, account_name, total_payment_amount_kobo, expires_at
+      FROM paga_payment_requests
+      WHERE order_id=$1 AND status IN ('creating','pending','review')
+      ORDER BY created_at DESC LIMIT 1`, [order.id]);
+    if (existing?.status === "pending") {
+      if (existing.bank_name && existing.account_number && existing.account_name && existing.total_payment_amount_kobo) {
+        await q(tx, `UPDATE orders SET order_account_bank=$2, order_account_number=$3, order_account_name=$4,
+          order_account_expires_at=$5, order_account_total_payment_kobo=$6, updated_at=now() WHERE id=$1`,
+        [order.id, existing.bank_name, existing.account_number, existing.account_name, existing.expires_at, existing.total_payment_amount_kobo]);
+      }
+      return { kind: "ready" as const };
+    }
+    const phone = inputPhone ?? order.buyer_phone;
+    const email = inputEmail ?? order.buyer_email;
+    if (existing?.status === "creating" && Date.now() - existing.created_at.getTime() < 60_000) {
+      return { kind: "creating" as const };
+    }
+    if (existing?.status === "review" && existing.last_error !== "Provider request outcome requires reconciliation.") {
+      throw new AppError("CONFLICT", "Paga is checking this payment request. Please contact support if this continues.");
+    }
+    if (!phone || !email) {
+      throw new AppError("VALIDATION", "Enter both a phone number and email address to create payment details.", {
+        ...(!phone ? { phone: "Enter a valid Nigerian phone number." } : {}),
+        ...(!email ? { email: "Enter a valid email address." } : {}),
+      });
+    }
+
+    if (existing?.status === "creating" || existing?.status === "review") {
+      return {
+        kind: "create" as const,
+        orderId: order.id,
+        amountKobo: existing.request_amount_kobo,
+        reference: existing.reference_number,
+        expiresAt: existing.expires_at,
+        buyerPhone: phone,
+        buyerEmail: email,
+      };
+    }
+
+    const requestExpiresAt = new Date(Math.min(order.expires_at.getTime(), Date.now() + 24 * 60 * 60 * 1000));
+    const reference = `PS-${order.id}-${randomUUID().replace(/-/g, "").slice(0, 8)}`;
+    await q(tx, `INSERT INTO paga_payment_requests (order_id, reference_number, request_amount_kobo, expires_at, status)
+      VALUES ($1,$2,$3,$4,'creating')`, [order.id, reference, order.total_kobo, requestExpiresAt]);
+    await q(tx, `UPDATE orders SET buyer_phone=COALESCE($2,buyer_phone), buyer_email=COALESCE($3,buyer_email), updated_at=now()
+      WHERE id=$1`, [order.id, phone, email]);
+    return {
+      kind: "create" as const,
+      orderId: order.id,
+      amountKobo: order.total_kobo,
+      reference,
+      expiresAt: requestExpiresAt,
+      buyerPhone: phone,
+      buyerEmail: email,
+    };
+  });
+
+  if (result.kind !== "create") {
+    const publicOrder = await loadPublic(token);
+    if (!publicOrder) throw new AppError("NOT_FOUND", "We couldn't find this payment link.");
+    return publicOrder;
+  }
+
+  try {
+    const account = await provider.createCollectionAccount({
+      orderId: result.orderId,
+      amountKobo: result.amountKobo,
+      reference: result.reference,
+      expiresAt: result.expiresAt,
+      buyerPhone: result.buyerPhone ?? undefined,
+      buyerEmail: result.buyerEmail,
+    });
+    await withTx(async (tx) => {
+      const request = await q1<{ id: string }>(tx, `UPDATE paga_payment_requests SET
+          total_payment_amount_kobo=$2, bank_name=$3, account_number=$4, account_name=$5,
+          expires_at=$6, status='pending', last_error=NULL, updated_at=now()
+        WHERE reference_number=$1 AND (
+          status='creating' OR (status='review' AND last_error='Provider request outcome requires reconciliation.')
+        ) RETURNING id`,
+      [result.reference, account.totalPaymentAmountKobo, account.bankName, account.accountNumber, account.accountName, account.expiresAt]);
+      if (!request) throw new AppError("CONFLICT", "The payment request changed while details were being created.");
+      await q(tx, `UPDATE orders SET order_account_bank=$2, order_account_number=$3, order_account_name=$4,
+          order_account_expires_at=$5, order_account_total_payment_kobo=$6, updated_at=now()
+        WHERE id=$1 AND status='awaiting_payment'`,
+      [result.orderId, account.bankName, account.accountNumber, account.accountName, account.expiresAt, account.totalPaymentAmountKobo]);
+    });
+  } catch (error) {
+    await q(undefined, `UPDATE paga_payment_requests SET status='review',
+      last_error='Provider request outcome requires reconciliation.', updated_at=now()
+      WHERE reference_number=$1 AND status='creating'`, [result.reference]);
+    throw error;
+  }
+
+  const publicOrder = await loadPublic(token);
+  if (!publicOrder) throw new AppError("NOT_FOUND", "We couldn't find this payment link.");
+  return publicOrder;
 }
 
 export async function listOrders(sellerId: string): Promise<SellerOrder[]> {
@@ -109,10 +265,17 @@ export async function cancelOrder(sellerId: string, orderId: string): Promise<Se
 
 /** Read-only: never changes funding. Funding only comes from recordFunding(). */
 export async function checkPayment(token: string): Promise<{ status: "funded" | "awaiting_payment"; order: PublicOrder }> {
-  await rateLimit({ key: `check:${token}`, limit: 60, windowSeconds: 600 });
+  await rateLimit({ key: `check:${token}`, limit: 180, windowSeconds: 600 });
   const [g] = await loadGraphs(undefined, "o.token = $1 AND o.status <> 'draft'", [token]);
   if (!g) throw new AppError("NOT_FOUND", "We couldn't find this payment link.");
-  const order = toPublicOrder(g);
+  if (g.order.status === "awaiting_payment" && getPaymentProvider().name === "paga") {
+    const request = await q1<{ reference_number: string }>(undefined, `SELECT reference_number FROM paga_payment_requests
+      WHERE order_id=$1 AND status IN ('pending','review') ORDER BY created_at DESC LIMIT 1`, [g.order.id]);
+    if (request) await reconcilePagaPaymentRequest(request.reference_number);
+  }
+  const [fresh] = await loadGraphs(undefined, "o.token = $1 AND o.status <> 'draft'", [token]);
+  if (!fresh) throw new AppError("NOT_FOUND", "We couldn't find this payment link.");
+  const order = toPublicOrder(fresh);
   return { status: order.amountFundedKobo >= order.totalKobo && order.status !== "awaiting_payment" ? "funded" : "awaiting_payment", order };
 }
 

@@ -5,7 +5,7 @@ export type DisputeStatus = "open" | "awaiting_response" | "under_review" | "res
 export type DisputeReason = "not_delivered" | "not_as_described" | "delivered_late" | "other";
 export type DisputeOutcome = "release_to_seller" | "refund_to_buyer" | "split";
 export type LedgerType = "funding" | "release" | "fee" | "refund";
-export type PayoutStatus = "queued" | "processing" | "paid" | "failed";
+export type PayoutStatus = "queued" | "processing" | "pending" | "paid" | "failed" | "reversed";
 export type PayoutKind = "seller_payout" | "buyer_refund";
 export type TrustLevel = "new" | "rising" | "trusted" | "verified";
 export type UserRole = "buyer" | "seller" | "admin";
@@ -36,7 +36,13 @@ export interface Milestone {
   proof?: Proof; deliveredAt?: string; releaseAt?: string; changeRequestCount: number;
 }
 
-export interface OrderAccount { bankName: string; accountNumber: string; accountName: string; expiresAt: string }
+export interface OrderAccount {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  expiresAt: string;
+  totalPaymentAmountKobo: number;
+}
 export interface ReceiptRef { number: string; publicToken: string; type: "payment" | "completion"; milestoneId: string | null; issuedAt: string }
 
 export interface DisputeSummary {

@@ -20,7 +20,20 @@ npm run dev                         # http://localhost:3000
 - Sign up as a seller at `/get-started`. With no SMTP configured in sandbox, the verification code is written to `.dev-outbox/*.json`.
 - Admin console: `/admin/sign-in`.
 - On a payment page in sandbox, **Simulate this bank transfer** stands in for the buyer's bank transfer.
-- Background jobs (expire unpaid orders, reminders, auto-release, payout retries): call `POST /api/cron/tick` with `Authorization: Bearer $CRON_SECRET` every 1 to 5 minutes (GitHub Actions, cron-job.org, Vercel Cron), or run `npm run jobs:tick` locally.
+- Background jobs (expire unpaid orders, reminders, auto-release, payment and payout reconciliation): call `POST /api/cron/tick` with `Authorization: Bearer $CRON_SECRET` every 1 to 5 minutes (GitHub Actions, cron-job.org, Vercel Cron), or run `npm run jobs:tick` locally.
+
+## Paga setup
+
+Set `PAYMENT_MODE=paga`, configure `PAGA_ENV`, `PAGA_PUBLIC_KEY`, `PAGA_SECRET_KEY`, and `PAGA_HASH_KEY`, and set `NEXT_PUBLIC_APP_URL` to the public HTTPS origin Paga can reach. Apply `db/migrations/0002_paga_provider.sql` before deploying this version. Register these callback URLs with Paga:
+
+- Collection: `https://<your-domain>/api/webhooks/paga`
+- Bank payouts: `https://<your-domain>/api/webhooks/paga-payouts`
+
+Paga payment requests require both the buyer's phone number and email. If either is missing on the order, checkout asks the buyer to provide both before creating transfer details. The displayed transfer amount is Paga's exact `totalPaymentAmount`, which can differ from the order total. Payout bank details are revalidated before each transfer; Paga's bank list is used while Paga is enabled.
+
+Run the app with Paga sandbox credentials first and verify collection callbacks, refunds, payouts, payout reversals, and reconciliation against your Paga sandbox account. Never enable live payments until these flows have been verified with Paga. The cron job checks uncertain payout outcomes through `transactionStatus`; it resubmits once with the same reference and saved destination only when Paga returns code `135`. Other ambiguous outcomes remain pending, and no retry uses a new reference automatically.
+
+To smoke-test Paga's bank list, collection request, and status lookup without transferring money, set `PAGA_SMOKE_PHONE` and `PAGA_SMOKE_EMAIL` to sandbox buyer details and run `npm run paga:smoke`. The script refuses to run unless `PAGA_ENV=sandbox`; it creates a one-hour sandbox payment request.
 
 For production, run `npm run db:migrate` manually against the production Neon branch before starting the new app version. Set `DATABASE_URL_UNPOOLED` to the direct connection URL from that same branch; migrations are deliberately not run during build or startup. The migration creates the schema, including `admin_users` and `admin_sessions`; seed the first admin once afterward.
 
@@ -34,9 +47,9 @@ Tests: set `TEST_DATABASE_URL` to a dedicated disposable PostgreSQL test databas
 
 | Area | Where |
 | --- | --- |
-| Schema and constraints | `db/migrations/0001_init.sql` (ledger and audit log are append-only via triggers; a trigger refuses any ledger entry that would take an order's held balance below zero) |
+| Schema and constraints | `db/migrations/0001_init.sql` and `0002_paga_provider.sql` (ledger and audit log are append-only via triggers; a trigger refuses any ledger entry that would take an order's held balance below zero) |
 | Money services | `src/server/services/` : `funding` (the only code that credits an order), `settlement` (release), `disputes`, `payouts`, `jobs`, `trust`, `receipts`, `orders`, `admin` |
-| Payment rail | `src/server/payments/provider.ts` interface, `simulator.ts` sandbox implementation, and `paga.ts` adapter with a Paga webhook route. |
+| Payment rail | `src/server/payments/provider.ts` interface, `simulator.ts` sandbox implementation, and `paga.ts` adapter with signed collection and payout webhooks plus cron reconciliation. |
 | HTTP | `src/app/api/**/route.ts`, all wrapped by `withApi` (Origin check, zod validation, auth, rate limits, uniform errors) |
 | Auth | Email + password, 6-digit emailed OTP (hashed, 5 attempts, 10 min), DB-backed sessions in httpOnly cookies, separate admin sessions with lockout. `src/proxy.ts` is an optimistic gate; layouts and every API route re-check. |
 | Shared types | `src/lib/domain/types.ts`. Public (buyer) DTOs never include seller contact or bank details. |
@@ -55,7 +68,7 @@ State rules, fee tiers (1.5% up to ₦50,000, 2% above; paid by the seller) and 
 
 ## Not done yet (be aware before launch)
 
-- **Paga integration is not provider-verified.** A Paga adapter and signed-webhook handler exist, but this project has not validated their request, callback, payout, refund, or signature formats against Paga's current documentation or sandbox. Do not enable live payments until Paga confirms the integration and it passes sandbox tests.
+- **Paga sandbox verification is still required.** The adapter follows the current Paga API documentation, but has not yet been exercised against a Paga sandbox account. Do not enable live payments until collection, callback, refund, payout, reversal, and reconciliation flows pass sandbox tests and the setup has been reviewed with Paga.
 - **Bank account name verification** is optional via `BANK_RESOLVER=paga`; with the default manual resolver, sellers type the account name and it is saved unverified.
 - **File uploads** for proof and evidence (links and notes only for now).
 - SMS/WhatsApp notifications, seller identity verification, buyer standing for repeated false disputes, admin seller-detail page.

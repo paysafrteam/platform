@@ -5,9 +5,20 @@ import { writeAudit } from "@/server/audit";
 import { emailBuyer, notify } from "@/server/services/notifications";
 import { lockOrder, settleMilestone } from "@/server/services/settlement";
 import { processPayout } from "@/server/services/payouts";
+import { getPaymentProvider } from "@/server/payments/simulator";
+import { reconcilePagaPayouts } from "@/server/services/paga-payout-reconciliation";
+import { reconcilePagaPaymentRequests } from "@/server/services/paga-reconciliation";
 import { REMINDER_BEFORE_RELEASE_HOURS } from "@/lib/domain/rules";
 
-export interface TickSummary { expired: number; reminded: number; autoReleased: number; payoutsRetried: number; errors: number }
+export interface TickSummary {
+  expired: number;
+  reminded: number;
+  autoReleased: number;
+  payoutsRetried: number;
+  pagaPaymentChecks: number;
+  pagaPayoutChecks: number;
+  errors: number;
+}
 
 async function expireUnpaid(): Promise<number> {
   const rows = await q<{ id: string }>(undefined, "SELECT id FROM orders WHERE status='awaiting_payment' AND expires_at <= now() LIMIT 200");
@@ -57,26 +68,44 @@ async function autoRelease(): Promise<{ released: number; errors: number }> {
   return { released, errors };
 }
 
-async function retryPayouts(): Promise<number> {
-  // A payout stuck in 'processing' (crashed worker) is re-queued; providers dedupe on the payout id.
-  await q(undefined, "UPDATE payouts SET status='queued', updated_at=now() WHERE status='processing' AND updated_at < now() - interval '10 minutes'");
+async function retryPayouts(): Promise<{ retried: number; pagaReconciled: number }> {
+  const isPaga = getPaymentProvider().name === "paga";
+  let pagaReconciled = 0;
+  if (isPaga) {
+    pagaReconciled = await reconcilePagaPayouts();
+  } else {
+    await q(undefined, "UPDATE payouts SET status='queued', updated_at=now() WHERE status='processing' AND updated_at < now() - interval '10 minutes'");
+  }
   const rows = await q<{ id: string }>(undefined,
     `SELECT id FROM payouts WHERE (status='queued' AND updated_at < now() - interval '30 seconds')
-        OR (status='failed' AND attempts < 3 AND updated_at < now() - interval '1 minute') ORDER BY created_at LIMIT 100`);
+        OR ($1::boolean = false AND status='failed' AND attempts < 3 AND updated_at < now() - interval '1 minute')
+      ORDER BY created_at LIMIT 100`, [isPaga]);
   let n = 0;
   for (const r of rows) { const res = await processPayout(r.id); if (res !== "skipped") n++; }
-  return n;
+  return { retried: n, pagaReconciled };
 }
 
 export async function runTick(): Promise<TickSummary> {
   const run = await q1<{ id: string }>(undefined, "INSERT INTO job_runs DEFAULT VALUES RETURNING id");
-  const summary: TickSummary = { expired: 0, reminded: 0, autoReleased: 0, payoutsRetried: 0, errors: 0 };
+  const summary: TickSummary = {
+    expired: 0,
+    reminded: 0,
+    autoReleased: 0,
+    payoutsRetried: 0,
+    pagaPaymentChecks: 0,
+    pagaPayoutChecks: 0,
+    errors: 0,
+  };
   let ok = true;
   const step = async <T>(fn: () => Promise<T>, apply: (v: T) => void) => { try { apply(await fn()); } catch (e) { ok = false; summary.errors++; console.error("[job] step failed:", e instanceof Error ? e.message : "error"); } };
+  await step(reconcilePagaPaymentRequests, (v) => (summary.pagaPaymentChecks = v));
   await step(expireUnpaid, (v) => (summary.expired = v));
   await step(sendReminders, (v) => (summary.reminded = v));
   await step(autoRelease, (v) => { summary.autoReleased = v.released; summary.errors += v.errors; });
-  await step(retryPayouts, (v) => (summary.payoutsRetried = v));
+  await step(retryPayouts, (v) => {
+    summary.payoutsRetried = v.retried;
+    summary.pagaPayoutChecks = v.pagaReconciled;
+  });
   await q(undefined, "UPDATE job_runs SET finished_at=now(), ok=$2, detail=$3 WHERE id=$1", [run!.id, ok && summary.errors === 0, JSON.stringify(summary)]);
   return summary;
 }

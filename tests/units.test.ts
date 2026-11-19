@@ -7,6 +7,22 @@ import { generateCode, hashCode } from "@/server/otp/service";
 import { normalizeNgPhone, safeNext } from "@/lib/auth-utils";
 import { passwordProblem } from "@/server/auth/password";
 import { isAllowedOrigin } from "@/server/http/withApi";
+import {
+  businessDepositHashText,
+  businessGetBanksHashText,
+  businessPayoutCallbackHash,
+  businessPayoutCallbackHashText,
+  businessTransactionStatusHashText,
+  collectRefundHashText,
+  collectRequestHashText,
+  collectStatusHashText,
+  parsePagaNairaToKobo,
+  PAGA_PAYOUT_HASH_PARAMETERS,
+  sha512Hex,
+  verifyCollectCallback,
+  verifyPayoutCallback,
+  collectCallbackHashText,
+} from "@/server/payments/paga-hash";
 
 describe("API origin validation", () => {
   const appUrl = "https://paysafr.example";
@@ -46,6 +62,81 @@ describe("fees and allocation", () => {
   it("validates milestone sums", () => {
     expect(isMilestoneAllocationValid([5, 5], 10)).toBe(true);
     expect(isMilestoneAllocationValid([5, 4], 10)).toBe(false);
+  });
+});
+
+describe("Paga signatures and amounts", () => {
+  const hashKey = "test-paga-hash-key";
+
+  it("uses the documented Collect and Business request-hash field order", () => {
+    expect(collectRequestHashText({
+      referenceNumber: "ORD-1",
+      amount: "50",
+      currency: "NGN",
+      payerPhoneNumber: "08064343187",
+      payerEmail: "buyer@example.test",
+      hashKey,
+    })).toBe(`ORD-150NGN08064343187buyer@example.test${hashKey}`);
+    expect(collectRequestHashText({
+      referenceNumber: "ORD-2",
+      amount: "50",
+      currency: "NGN",
+      payerPhoneNumber: "08064343187",
+      hashKey,
+    })).toBe(`ORD-250NGN08064343187${hashKey}`);
+    expect(collectStatusHashText("ORD-1", hashKey)).toBe(`ORD-1${hashKey}`);
+    expect(collectRefundHashText("REFUND-1", "25.50", hashKey)).toBe(`REFUND-125.50${hashKey}`);
+    expect(businessGetBanksHashText("BANK-1", hashKey)).toBe(`BANK-1${hashKey}`);
+    expect(businessDepositHashText({
+      referenceNumber: "PAY-1",
+      amount: "5000.00",
+      destinationBankUUID: "40090E2F-7446-4217-9345-7BBAB7043C4C",
+      destinationBankAccountNumber: "0000000000",
+      hashKey,
+    })).toBe(`PAY-15000.0040090E2F-7446-4217-9345-7BBAB7043C4C0000000000${hashKey}`);
+    expect(businessTransactionStatusHashText("PAY-1", hashKey)).toBe(`PAY-1${hashKey}`);
+  });
+
+  it("verifies collection callbacks using Paga's field order and two-decimal balance", () => {
+    const callback = {
+      notificationId: "notification-1",
+      statusCode: "0",
+      externalReferenceNumber: "PS-order-1",
+      state: "CONSUMED",
+      outstandingBalance: 0,
+    };
+    const hashText = collectCallbackHashText(callback, hashKey);
+    expect(hashText).toBe(`notification-10PS-order-1CONSUMED0.00${hashKey}`);
+    expect(hashText).not.toBeNull();
+    expect(verifyCollectCallback({ ...callback, hash: sha512Hex(hashText!) }, hashKey)).toBe(true);
+    expect(verifyCollectCallback({ ...callback, outstandingBalance: 1, hash: sha512Hex(hashText!) }, hashKey)).toBe(false);
+    expect(collectCallbackHashText({ ...callback, outstandingBalance: null }, hashKey))
+      .toBe(`notification-10PS-order-1CONSUMED${hashKey}`);
+  });
+
+  it("requires Paga's exact payout hash-parameter header and signed values", () => {
+    const callback = {
+      referenceNumber: "payout-1",
+      transactionDate: "2026-11-03 11:02:25.56",
+      transactionId: "RP658",
+      amount: "5000.0",
+      sessionId: "100002261103110226001406467019",
+    };
+    const hash = businessPayoutCallbackHash(callback, hashKey);
+    expect(businessPayoutCallbackHashText(callback, hashKey)).toBe(
+      `payout-12026-11-03 11:02:25.56RP6585000.0100002261103110226001406467019${hashKey}`,
+    );
+    expect(verifyPayoutCallback(callback, PAGA_PAYOUT_HASH_PARAMETERS, hash, hashKey)).toBe(true);
+    expect(verifyPayoutCallback(callback, "amount,referenceNumber", hash, hashKey)).toBe(false);
+    expect(verifyPayoutCallback({ ...callback, amount: "5000.1" }, PAGA_PAYOUT_HASH_PARAMETERS, hash, hashKey)).toBe(false);
+  });
+
+  it("converts only positive naira values with at most two decimal places", () => {
+    expect(parsePagaNairaToKobo("50.41")).toBe(5041);
+    expect(parsePagaNairaToKobo(50)).toBe(5000);
+    expect(parsePagaNairaToKobo("0")).toBeNull();
+    expect(parsePagaNairaToKobo("50.411")).toBeNull();
+    expect(parsePagaNairaToKobo("-1")).toBeNull();
   });
 });
 

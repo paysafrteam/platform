@@ -84,6 +84,8 @@ export const openDispute = ({ token, ...rest }: OpenDisputeInput) => post<{ id: 
 export const addBuyerEvidence = (token: string, disputeId: string, i: { type: "text" | "link"; content: string }) =>
   post<{ saved: true }>(`/api/pay/${e(token)}/dispute/${e(disputeId)}/evidence`, i);
 export const contactSeller = (token: string, c: { email?: string; phone?: string }) => post<{ saved: true }>(`/api/pay/${e(token)}/contact`, c);
+export const createPagaPaymentAccount = (token: string, contact: { phone?: string; email?: string }) =>
+  post<PublicOrder>(`/api/pay/${e(token)}/paga-account`, contact);
 export const getBuyerReceipt = (token: string) => get<{ order: PublicOrder; receipts: PublicReceipt[] }>(`/api/pay/${e(token)}/receipt`);
 
 // ---- public share pages

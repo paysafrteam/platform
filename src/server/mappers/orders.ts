@@ -15,7 +15,8 @@ interface OrderRow {
   id: string; seller_id: string; token: string; title: string; description: string; total_kobo: number; status: string;
   buyer_email: string | null; buyer_phone: string | null; delivery_deadline: Date; review_window_hours: number; fee_kobo: number;
   amount_funded_kobo: number; overpaid_kobo: number; order_account_bank: string | null; order_account_number: string | null;
-  order_account_name: string | null; order_account_expires_at: Date | null; expires_at: Date | null; funded_at: Date | null;
+  order_account_name: string | null; order_account_expires_at: Date | null; order_account_total_payment_kobo: number | null;
+  expires_at: Date | null; funded_at: Date | null;
   completed_at: Date | null; needs_refund_flag: boolean; created_at: Date;
   seller_name: string; seller_business: string | null; seller_trust_score: number | null; seller_trust_level: TrustLevel; seller_completed: number;
 }
@@ -88,7 +89,13 @@ function base(g: OrderGraph) {
     trustScore: o.seller_trust_score, trustLevel: o.seller_trust_level, completedOrders: o.seller_completed,
   };
   const account: OrderAccount | undefined = status === "awaiting_payment" && o.order_account_number
-    ? { bankName: o.order_account_bank ?? "", accountNumber: o.order_account_number, accountName: o.order_account_name ?? "", expiresAt: (o.order_account_expires_at ?? o.expires_at)!.toISOString() }
+    ? {
+        bankName: o.order_account_bank ?? "",
+        accountNumber: o.order_account_number,
+        accountName: o.order_account_name ?? "",
+        expiresAt: (o.order_account_expires_at ?? o.expires_at)!.toISOString(),
+        totalPaymentAmountKobo: o.order_account_total_payment_kobo ?? o.total_kobo,
+      }
     : undefined;
   const payment = g.receipts.find((r) => r.type === "payment");
   const completions = g.receipts.filter((r) => r.type === "completion");

@@ -28,8 +28,10 @@ const disputeStatus: Record<DisputeStatus, { label: string; style: string; icon:
 const payoutStatus: Record<PayoutStatus, { label: string; style: string; icon: typeof Check }> = {
   queued: { label: "Queued", style: "border border-[var(--ps-grey-600)] text-[var(--ps-grey-600)]", icon: Clock3 },
   processing: { label: "Processing", style: "bg-[var(--ps-warning)]/20 text-[var(--ps-green-900)]", icon: Clock3 },
+  pending: { label: "Pending confirmation", style: "bg-[var(--ps-warning)]/20 text-[var(--ps-green-900)]", icon: Clock3 },
   paid: { label: "Paid", style: "bg-[var(--ps-green-400)] text-[var(--ps-green-900)]", icon: Check },
   failed: { label: "Failed", style: "bg-[var(--ps-danger)]/10 text-[var(--ps-danger)]", icon: CircleAlert },
+  reversed: { label: "Returned", style: "bg-[var(--ps-danger)]/10 text-[var(--ps-danger)]", icon: CircleAlert },
 };
 
 type BadgeStatus = OrderStatus | MilestoneStatus | DisputeStatus | PayoutStatus;

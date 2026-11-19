@@ -13,6 +13,7 @@
     "seed:admin": "tsx scripts/seed-admin.ts",
     "admin:set-password": "tsx scripts/set-admin-password.ts",
     "jobs:tick": "tsx --conditions react-server scripts/tick.ts",
+    "paga:smoke": "tsx --conditions react-server scripts/paga-smoke.ts",
     "test": "vitest run"
   },
   "dependencies": {

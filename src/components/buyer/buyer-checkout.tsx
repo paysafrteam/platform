@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorState } from "@/components/feedback/states";
 import { useStatusDialog } from "@/components/feedback/dialog-provider";
@@ -27,7 +27,7 @@ import { Countdown, useCurrentTime } from "@/components/ui/countdown";
 import { Money } from "@/components/ui/money";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ShareActions } from "@/components/share/share-actions";
-import { checkPayment, confirmMilestone, contactSeller, getPayOrder, requestChanges, simulatePayment } from "@/lib/api";
+import { ApiError, checkPayment, confirmMilestone, contactSeller, createPagaPaymentAccount, getPayOrder, requestChanges, simulatePayment } from "@/lib/api";
 import { formatLagosDate } from "@/lib/format/dates";
 import type { Milestone, PublicOrder as Order } from "@/lib/domain/types";
 
@@ -37,7 +37,7 @@ const protectionRules = [
   "If something goes wrong, the money stays on hold while we review.",
 ];
 
-export function BuyerCheckout({ initialOrder }: { initialOrder: Order }) {
+export function BuyerCheckout({ initialOrder, pagaEnabled }: { initialOrder: Order; pagaEnabled: boolean }) {
   const [order, setOrder] = useState(initialOrder);
   const [loadingError, setLoadingError] = useState(false);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
@@ -46,7 +46,14 @@ export function BuyerCheckout({ initialOrder }: { initialOrder: Order }) {
   const [changeNote, setChangeNote] = useState("");
   const [contact, setContact] = useState("");
   const [savingContact, setSavingContact] = useState(false);
+  const [pagaPhone, setPagaPhone] = useState("");
+  const [pagaEmail, setPagaEmail] = useState("");
+  const [creatingPagaAccount, setCreatingPagaAccount] = useState(false);
+  const [pagaContactRequired, setPagaContactRequired] = useState(false);
+  const [pagaAccountError, setPagaAccountError] = useState("");
+  const attemptedPagaRequests = useRef(new Set<string>());
   const dialog = useStatusDialog();
+  const now = useCurrentTime();
 
   const reload = useCallback(async () => {
     setLoadingError(false);
@@ -58,6 +65,33 @@ export function BuyerCheckout({ initialOrder }: { initialOrder: Order }) {
     }
   }, [initialOrder.token]);
 
+  const createPagaAccount = useCallback(async (contactInput: { phone?: string; email?: string }) => {
+    setCreatingPagaAccount(true);
+    setPagaAccountError("");
+    try {
+      const updated = await createPagaPaymentAccount(initialOrder.token, contactInput);
+      setOrder(updated);
+      if (!updated.orderAccount) setPagaAccountError("Payment details are still being created. Please retry shortly.");
+      else setPagaContactRequired(false);
+    } catch (error) {
+      setPagaAccountError(error instanceof Error ? error.message : "We couldn't create payment details.");
+      if (error instanceof ApiError && error.fields && ("phone" in error.fields || "email" in error.fields)) {
+        setPagaContactRequired(true);
+      }
+    } finally {
+      setCreatingPagaAccount(false);
+    }
+  }, [initialOrder.token]);
+
+  useEffect(() => {
+    if (!pagaEnabled || order.status !== "awaiting_payment" || (order.expiresAt && Date.parse(order.expiresAt) <= now)) return;
+    if (order.orderAccount && Date.parse(order.orderAccount.expiresAt) > now) return;
+    const requestKey = `${order.token}:${order.orderAccount?.expiresAt ?? "missing"}`;
+    if (attemptedPagaRequests.current.has(requestKey)) return;
+    attemptedPagaRequests.current.add(requestKey);
+    void createPagaAccount({});
+  }, [createPagaAccount, now, order, pagaEnabled]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => void reload(), 0);
     return () => window.clearTimeout(timer);
@@ -65,7 +99,7 @@ export function BuyerCheckout({ initialOrder }: { initialOrder: Order }) {
 
   useEffect(() => {
     if (order.status !== "awaiting_payment") return;
-    const timer = window.setInterval(() => void reload(), 8000);
+    const timer = window.setInterval(() => void reload(), 5000);
     return () => window.clearInterval(timer);
   }, [order.status, reload]);
 
@@ -202,7 +236,29 @@ export function BuyerCheckout({ initialOrder }: { initialOrder: Order }) {
           <section className="surface-card h-fit p-5 sm:p-7">{summaryContent}</section>
           <section className="space-y-4">
             {order.status === "awaiting_payment" ? (
-              <PaymentPanel order={order} partial={isPartial} onPaid={markTransfer} onSandboxPay={() => void sandboxPay()} onTrouble={() => setSheet("trouble")} contact={contact} setContact={setContact} onSaveContact={saveContact} savingContact={savingContact} />
+              <PaymentPanel
+                order={order}
+                partial={isPartial}
+                pagaEnabled={pagaEnabled}
+                onCreatePagaAccount={() => void createPagaAccount({
+                  phone: pagaPhone.trim() || undefined,
+                  email: pagaEmail.trim() || undefined,
+                })}
+                creatingPagaAccount={creatingPagaAccount}
+                pagaContactRequired={pagaContactRequired}
+                pagaPhone={pagaPhone}
+                setPagaPhone={setPagaPhone}
+                pagaEmail={pagaEmail}
+                setPagaEmail={setPagaEmail}
+                pagaAccountError={pagaAccountError}
+                onPaid={markTransfer}
+                onSandboxPay={() => void sandboxPay()}
+                onTrouble={() => setSheet("trouble")}
+                contact={contact}
+                setContact={setContact}
+                onSaveContact={saveContact}
+                savingContact={savingContact}
+              />
             ) : null}
             {order.status === "expired" || order.status === "cancelled" ? <ClosedPanel order={order} expired={order.status === "expired"} /> : null}
             {order.status === "completed" && allRefunded ? <CompletionPanel order={order} refunded /> : null}
@@ -219,7 +275,7 @@ export function BuyerCheckout({ initialOrder }: { initialOrder: Order }) {
           <PoweredByPaga variant="footer" />
         </div>
       </div>
-      {order.status === "awaiting_payment" ? <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[var(--ps-grey-200)] bg-white/95 p-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur md:hidden"><button type="button" onClick={markTransfer} className="min-h-12 w-full rounded-full bg-[var(--ps-green-400)] px-5 text-[var(--ps-green-900)]">I&apos;ve made the transfer</button></div> : null}
+      {order.status === "awaiting_payment" && (!pagaEnabled || order.orderAccount) ? <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[var(--ps-grey-200)] bg-white/95 p-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur md:hidden"><button type="button" onClick={markTransfer} className="min-h-12 w-full rounded-full bg-[var(--ps-green-400)] px-5 text-[var(--ps-green-900)]">I&apos;ve made the transfer</button></div> : null}
       {hasDelivered && !isDisputed ? <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[var(--ps-grey-200)] bg-white/95 p-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur md:hidden"><button type="button" onClick={() => void releaseMilestone()} className="min-h-12 w-full rounded-full bg-[var(--ps-green-400)] px-5 text-[var(--ps-green-900)]">Confirm and release {primaryMilestone ? formatAmount(primaryMilestone.amountKobo) : ""}</button></div> : null}
       {sheet ? <ActionSheet title={sheet === "trouble" ? "Having trouble paying?" : "Ask for changes"} onClose={() => setSheet(null)}>
         {sheet === "trouble" ? <div className="space-y-4 text-sm leading-6 text-[var(--ps-grey-600)]"><p>Use your bank app or wallet to transfer the exact amount shown to the account above.</p><p>The bank may take a little time to confirm a transfer. Keep this page open and check again.</p><p>A screenshot does not mark the order as paid. Only a verified bank confirmation does.</p></div> : <div><label className="block text-sm" htmlFor="change-note">What would you like the seller to change?</label><textarea id="change-note" rows={4} value={changeNote} onChange={(event) => setChangeNote(event.target.value)} className="mt-2 w-full rounded-2xl border border-[var(--ps-grey-200)] p-3" placeholder="Tell the seller what needs a closer look." /><button type="button" onClick={() => void sendChangeRequest()} className="mt-4 min-h-12 w-full rounded-full bg-[var(--ps-green-400)]">Send request</button></div>}
@@ -228,31 +284,63 @@ export function BuyerCheckout({ initialOrder }: { initialOrder: Order }) {
   );
 }
 
-function PaymentPanel({ order, partial, onPaid, onSandboxPay, onTrouble, contact, setContact, onSaveContact, savingContact }: {
-  order: Order; partial: boolean; onPaid: () => void; onSandboxPay: () => void; onTrouble: () => void; contact: string;
-  setContact: (value: string) => void; onSaveContact: () => void; savingContact: boolean;
+function PaymentPanel({
+  order, partial, pagaEnabled, onCreatePagaAccount, creatingPagaAccount, pagaContactRequired,
+  pagaPhone, setPagaPhone, pagaEmail, setPagaEmail, pagaAccountError, onPaid, onSandboxPay,
+  onTrouble, contact, setContact, onSaveContact, savingContact,
+}: {
+  order: Order; partial: boolean; pagaEnabled: boolean; onCreatePagaAccount: () => void; creatingPagaAccount: boolean;
+  pagaContactRequired: boolean; pagaPhone: string; setPagaPhone: (value: string) => void; pagaEmail: string;
+  setPagaEmail: (value: string) => void; pagaAccountError: string; onPaid: () => void; onSandboxPay: () => void;
+  onTrouble: () => void; contact: string; setContact: (value: string) => void; onSaveContact: () => void; savingContact: boolean;
 }) {
   const remaining = Math.max(0, order.totalKobo - order.amountFundedKobo);
   const account = order.orderAccount;
+  const now = useCurrentTime();
+  const hasAccount = Boolean(account && (!pagaEnabled || Date.parse(account.expiresAt) > now));
+  const amountToSend = hasAccount && account ? account.totalPaymentAmountKobo : (partial ? remaining : order.totalKobo);
   return (
     <article className="surface-card p-5 sm:p-7">
       {partial ? <div className="mb-5 rounded-2xl border border-[var(--ps-warning)]/50 bg-[var(--ps-warning)]/15 p-4"><div className="flex items-start gap-2 text-sm"><CircleAlert size={18} /><p>We received <Money kobo={order.amountFundedKobo} />. <Money kobo={remaining} /> left to pay.</p></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-white"><div className="h-full rounded-full bg-[var(--ps-green-900)]" style={{ width: `${Math.min(100, (order.amountFundedKobo / order.totalKobo) * 100)}%` }} /></div></div> : null}
-      <h2 className="font-display text-2xl leading-tight">Pay <Money kobo={partial ? remaining : order.totalKobo} /> by bank transfer</h2>
-      <p className="mt-2 text-sm text-[var(--ps-grey-600)]">Use these details in your bank app. Your order account is for this order only.</p>
+      <h2 className="font-display text-2xl leading-tight">{hasAccount ? <>Pay <Money kobo={amountToSend} /> by bank transfer</> : "Set up your bank transfer"}</h2>
+      <p className="mt-2 text-sm text-[var(--ps-grey-600)]">{hasAccount ? "Use these details in your bank app. Your order account is for this order only." : "Create secure bank-transfer details to continue."}</p>
+      {pagaEnabled && !hasAccount ? (
+        <div className="mt-4 rounded-2xl border border-[var(--ps-grey-200)] p-4">
+          {pagaContactRequired ? (
+            <div className="space-y-3">
+              <p className="text-sm">Paga requires both a phone number and email address to create transfer details.</p>
+              <label className="block text-sm" htmlFor="paga-phone">Phone number</label>
+              <input id="paga-phone" type="tel" autoComplete="tel" value={pagaPhone} onChange={(event) => setPagaPhone(event.target.value)} className="h-11 w-full rounded-2xl border border-[var(--ps-grey-200)] px-3 text-sm" placeholder="+234..." />
+              <label className="block text-sm" htmlFor="paga-email">Email address</label>
+              <input id="paga-email" type="email" autoComplete="email" value={pagaEmail} onChange={(event) => setPagaEmail(event.target.value)} className="h-11 w-full rounded-2xl border border-[var(--ps-grey-200)] px-3 text-sm" placeholder="you@example.com" />
+            </div>
+          ) : null}
+          {pagaAccountError ? <p role="alert" className="mt-3 text-sm text-[var(--ps-danger)]">{pagaAccountError}</p> : null}
+          <button type="button" onClick={onCreatePagaAccount} disabled={creatingPagaAccount} className="mt-4 min-h-11 w-full rounded-full bg-[var(--ps-green-400)] px-4 text-sm text-[var(--ps-green-900)] disabled:opacity-50">
+            {creatingPagaAccount ? "Creating payment details…" : "Create payment details"}
+          </button>
+        </div>
+      ) : null}
+      {!pagaEnabled || hasAccount ? (
       <div className="mt-4 rounded-2xl border border-[var(--ps-grey-200)] px-4">
-        <CopyField label="Bank" value={account?.bankName ?? ""} />
-        <CopyField label="Account number" value={account?.accountNumber ?? ""} large />
-        <CopyField label="Account name" value={account?.accountName ?? ""} />
-        <CopyField label="Amount to send" value={formatAmount(partial ? remaining : order.totalKobo)} large />
-        <div className="flex items-center justify-between gap-3 border-t border-[var(--ps-grey-200)] py-3 text-sm"><span className="text-[var(--ps-grey-600)]">Pay within</span><span className="money"><Countdown target={account?.expiresAt ?? order.expiresAt ?? order.createdAt} label="Payment link expires" /></span></div>
+        {hasAccount && account ? <>
+          <CopyField label="Bank" value={account.bankName} />
+          <CopyField label="Account number" value={account.accountNumber} large />
+          <CopyField label="Account name" value={account.accountName} />
+          <CopyField label="Amount to send" value={formatAmount(amountToSend)} large />
+          <div className="flex items-center justify-between gap-3 border-t border-[var(--ps-grey-200)] py-3 text-sm"><span className="text-[var(--ps-grey-600)]">Pay within</span><span className="money"><Countdown target={account.expiresAt} label="Payment link expires" /></span></div>
+        </> : <p className="py-4 text-sm text-[var(--ps-grey-600)]">Preparing your secure payment account…</p>}
       </div>
+      ) : null}
       <div className="mt-4"><PoweredByPaga /></div>
-      <ol className="mt-5 space-y-3">
-        {["Open your bank app", `Send exactly ${formatAmount(partial ? remaining : order.totalKobo)} to this account`, "We'll detect it automatically"].map((step, index) => <li key={step} className="flex items-center gap-3 text-sm"><span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--ps-grey-200)]/50 text-xs">{index + 1}</span>{step}</li>)}
-      </ol>
-      <p className="mt-4 text-xs leading-5 text-[var(--ps-grey-600)]">Only the bank&apos;s confirmation counts. A screenshot can&apos;t mark an order as paid.</p>
-      <button type="button" onClick={onPaid} className="mt-5 hidden min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--ps-green-400)] px-5 text-[var(--ps-green-900)] md:inline-flex">I&apos;ve made the transfer <ArrowRight size={17} /></button>
-      <button type="button" onClick={onTrouble} className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm text-[var(--ps-grey-600)]"><HelpCircle size={16} /> Having trouble?</button>
+      {hasAccount && account ? <>
+        <ol className="mt-5 space-y-3">
+          {["Open your bank app", `Send exactly ${formatAmount(amountToSend)} to this account`, "We'll detect it automatically"].map((step, index) => <li key={step} className="flex items-center gap-3 text-sm"><span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--ps-grey-200)]/50 text-xs">{index + 1}</span>{step}</li>)}
+        </ol>
+        <p className="mt-4 text-xs leading-5 text-[var(--ps-grey-600)]">Only the bank&apos;s confirmation counts. A screenshot can&apos;t mark the order as paid.</p>
+        <button type="button" onClick={onPaid} className="mt-5 hidden min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--ps-green-400)] px-5 text-[var(--ps-green-900)] md:inline-flex">I&apos;ve made the transfer <ArrowRight size={17} /></button>
+        <button type="button" onClick={onTrouble} className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm text-[var(--ps-grey-600)]"><HelpCircle size={16} /> Having trouble?</button>
+      </> : null}
       <div className="mt-5 border-t border-[var(--ps-grey-200)] pt-4">
         <div className="flex items-center gap-2 text-sm"><Mail size={15} /> Get updates <span className="text-xs text-[var(--ps-grey-600)]">Optional</span></div>
         <div className="mt-2 flex gap-2"><input aria-label="Email or phone number for updates" value={contact} onChange={(event) => setContact(event.target.value)} className="h-11 min-w-0 flex-1 rounded-2xl border border-[var(--ps-grey-200)] px-3 text-sm" placeholder="Email or phone number" /><button type="button" onClick={onSaveContact} disabled={!contact || savingContact} className="min-h-11 rounded-full border border-[var(--ps-green-900)] px-4 text-sm disabled:opacity-50">{savingContact ? "Saving" : "Save"}</button></div>

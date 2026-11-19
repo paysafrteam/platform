@@ -9,7 +9,7 @@ import { qualifyingOrders, QUALIFYING_MIN_ORDERS } from "@/server/services/trust
 import { nigerianBanks } from "@/content/nigerian-banks";
 import type { DashboardData, IncomeData, Notification, PayoutAccount, PublicInvoice, TrustData, TrustLevel } from "@/lib/domain/types";
 import type { SessionUser } from "@/server/auth/session";
-import { validatePagaBankAccount } from "@/server/payments/paga";
+import { listPagaBanks, validatePagaBankAccount } from "@/server/payments/paga";
 import { env } from "@/server/env";
 
 /** Last `count` Lagos calendar months (Lagos is UTC+1 with no DST), oldest first. */
@@ -85,11 +85,14 @@ export async function markNotificationsRead(userId: string, ids?: string[]) {
   return { ok: true as const };
 }
 
-export const listBanks = () => nigerianBanks;
+export async function listBanks() {
+  return env().PAYMENT_MODE === "paga" ? listPagaBanks() : nigerianBanks;
+}
 
 export async function resolveBank(input: { bankCode: string; accountNumber: string }) {
   if (!/^\d{10}$/.test(input.accountNumber)) throw new AppError("VALIDATION", "Enter a 10-digit account number.", { accountNumber: "Enter a 10-digit account number." });
-  if (!nigerianBanks.some((b) => b.code === input.bankCode)) throw new AppError("VALIDATION", "Choose a bank from the list.", { bankCode: "Choose a bank." });
+  const banks = env().PAYMENT_MODE === "paga" ? await listPagaBanks() : nigerianBanks;
+  if (!banks.some((b) => b.code === input.bankCode)) throw new AppError("VALIDATION", "Choose a bank from the list.", { bankCode: "Choose a bank." });
   if (env().BANK_RESOLVER === "paga") {
     const resolved = await validatePagaBankAccount(input);
     return { accountName: resolved.accountName, verified: true, manual: false as const };
@@ -98,7 +101,8 @@ export async function resolveBank(input: { bankCode: string; accountNumber: stri
 }
 
 export async function savePayoutAccount(user: SessionUser, input: { bankCode: string; accountNumber: string; accountName: string }, ip: string): Promise<PayoutAccount> {
-  const bank = nigerianBanks.find((b) => b.code === input.bankCode);
+  const banks = env().PAYMENT_MODE === "paga" ? await listPagaBanks() : nigerianBanks;
+  const bank = banks.find((b) => b.code === input.bankCode);
   if (!bank) throw new AppError("VALIDATION", "Choose a bank from the list.", { bankCode: "Choose a bank." });
   let accountName = input.accountName.trim();
   let verified = false;

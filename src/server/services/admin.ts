@@ -32,7 +32,7 @@ export async function overview() {
     q1<{ n: number }>(undefined, "SELECT COALESCE(SUM(CASE WHEN type='funding' THEN amount_kobo ELSE -amount_kobo END),0)::bigint AS n FROM ledger_entries"),
     q1<{ c: number; n: number }>(undefined, `SELECT count(*)::int AS c, COALESCE(SUM(amount_kobo),0)::bigint AS n FROM ledger_entries WHERE type='funding' AND created_at >= ${LAGOS_MIDNIGHT}`),
     q1<{ open: number; due_soon: number; oldest: Date | null }>(undefined, `SELECT count(*)::int AS open, count(*) FILTER (WHERE response_due_at <= now() + interval '12 hours')::int AS due_soon, min(opened_at) AS oldest FROM disputes WHERE status <> 'resolved'`),
-    q1<{ pending: number; failed: number }>(undefined, `SELECT count(*) FILTER (WHERE status IN ('queued','processing'))::int AS pending, count(*) FILTER (WHERE status='failed')::int AS failed FROM payouts`),
+    q1<{ pending: number; failed: number }>(undefined, `SELECT count(*) FILTER (WHERE status IN ('queued','processing','pending'))::int AS pending, count(*) FILTER (WHERE status IN ('failed','reversed'))::int AS failed FROM payouts`),
     q1<{ n: number }>(undefined, "SELECT count(*)::int AS n FROM orders WHERE needs_refund_flag"),
     q1<{ total: number; new7d: number; unverified: number; limited: number; suspended: number }>(undefined, `SELECT count(*) FILTER (WHERE email_verified_at IS NOT NULL)::int AS total,
       count(*) FILTER (WHERE created_at > now() - interval '7 days' AND email_verified_at IS NOT NULL)::int AS new7d, count(*) FILTER (WHERE email_verified_at IS NULL)::int AS unverified,
@@ -48,7 +48,7 @@ export async function overview() {
     q1<{ at: Date | null }>(undefined, "SELECT max(started_at) AS at FROM job_runs"),
     reconciliation(),
   ]);
-  const failedPayouts = await q<{ id: string; order_id: string; amount_kobo: number; last_error: string | null }>(undefined, "SELECT id, order_id, amount_kobo, last_error FROM payouts WHERE status='failed' ORDER BY updated_at DESC LIMIT 5");
+  const failedPayouts = await q<{ id: string; order_id: string; amount_kobo: number; last_error: string | null }>(undefined, "SELECT id, order_id, amount_kobo, last_error FROM payouts WHERE status IN ('failed','reversed') ORDER BY updated_at DESC LIMIT 5");
   const flagged = await q<{ id: string; title: string }>(undefined, "SELECT id, title FROM orders WHERE needs_refund_flag ORDER BY updated_at DESC LIMIT 5");
   const dueSoon = await q<{ id: string; number: number; response_due_at: Date }>(undefined, "SELECT id, number, response_due_at FROM disputes WHERE status <> 'resolved' AND response_due_at <= now() + interval '12 hours' ORDER BY response_due_at LIMIT 5");
   const oldest = disputes?.oldest ? Math.floor((Date.now() - disputes.oldest.getTime()) / 3_600_000) : null;
@@ -127,7 +127,7 @@ export async function getAdminOrder(id: string) {
     q1<{ id: string; name: string; email: string; phone: string }>(undefined, "SELECT id, name, email, phone FROM users WHERE id=$1", [g.order.seller_id]),
     q<{ id: string; provider: string; provider_reference: string; amount_kobo: number; status: string; received_at: Date }>(undefined, "SELECT id, provider, provider_reference, amount_kobo, status, received_at FROM payments WHERE order_id=$1 ORDER BY received_at", [id]),
     q<{ id: string; milestone_id: string | null; type: string; amount_kobo: number; reference: string; created_at: Date }>(undefined, "SELECT id, milestone_id, type, amount_kobo, reference, created_at FROM ledger_entries WHERE order_id=$1 ORDER BY created_at, type", [id]),
-    q<{ id: string; milestone_id: string | null; kind: string; amount_kobo: number; status: string; attempts: number; last_error: string | null; provider_reference: string | null }>(undefined, "SELECT id, milestone_id, kind, amount_kobo, status, attempts, last_error, provider_reference FROM payouts WHERE order_id=$1 ORDER BY created_at", [id]),
+    q<{ id: string; milestone_id: string | null; kind: string; amount_kobo: number; status: string; attempts: number; last_error: string | null; provider_reference: string | null; paga_reference_number: string | null; reversal_id: string | null }>(undefined, "SELECT id, milestone_id, kind, amount_kobo, status, attempts, last_error, provider_reference, paga_reference_number, reversal_id FROM payouts WHERE order_id=$1 ORDER BY created_at", [id]),
     q<{ number: string; public_token: string; type: string; issued_at: Date; snapshot: { amountKobo: number } }>(undefined, "SELECT number, public_token, type, issued_at, snapshot FROM receipts WHERE order_id=$1 ORDER BY issued_at", [id]),
     q<{ id: string; actor_label: string; action: string; before: unknown; after: unknown; created_at: Date }>(undefined, `SELECT id, actor_label, action, before, after, created_at FROM audit_log WHERE (target_type='order' AND target_id=$1)
       OR (target_type='dispute' AND target_id IN (SELECT id::text FROM disputes WHERE order_id=$1)) ORDER BY created_at`, [id]),
@@ -137,7 +137,7 @@ export async function getAdminOrder(id: string) {
     order: toSellerOrder(g), seller, heldKobo: held,
     payments: payments.map((p) => ({ id: p.id, provider: p.provider, reference: p.provider_reference, amountKobo: p.amount_kobo, status: p.status, receivedAt: p.received_at.toISOString() })),
     ledger: ledger.map((l) => ({ id: l.id, milestoneId: l.milestone_id, type: l.type, amountKobo: l.amount_kobo, reference: l.reference, createdAt: l.created_at.toISOString() })),
-    payouts: payouts.map((p) => ({ id: p.id, milestoneId: p.milestone_id, kind: p.kind, amountKobo: p.amount_kobo, status: p.status, attempts: p.attempts, lastError: p.last_error, reference: p.provider_reference })),
+    payouts: payouts.map((p) => ({ id: p.id, milestoneId: p.milestone_id, kind: p.kind, amountKobo: p.amount_kobo, status: p.status, attempts: p.attempts, lastError: p.last_error, reference: p.provider_reference, pagaReference: p.paga_reference_number, reversalId: p.reversal_id })),
     receipts: receipts.map((r) => ({ number: r.number, token: r.public_token, type: r.type, amountKobo: r.snapshot.amountKobo, issuedAt: r.issued_at.toISOString() })),
     audit: audit.map((a) => ({ id: a.id, actor: a.actor_label, action: a.action, before: a.before, after: a.after, createdAt: a.created_at.toISOString() })),
   };
@@ -174,16 +174,32 @@ export async function listPayouts(f: { status?: string | undefined; kind?: strin
   if (f.kind) w.add("p.kind = ?", f.kind);
   const { page, pageSize, offset } = pageArgs(f.page);
   const total = (await q1<{ n: number }>(undefined, `SELECT count(*)::int AS n FROM payouts p ${w.sql}`, w.params))!.n;
-  const rows = await q<{ id: string; order_id: string; title: string; milestone_id: string | null; kind: string; amount_kobo: number; status: string; attempts: number; last_error: string | null; provider_reference: string | null; updated_at: Date }>(undefined,
-    `SELECT p.id, p.order_id, o.title, p.milestone_id, p.kind, p.amount_kobo, p.status, p.attempts, p.last_error, p.provider_reference, p.updated_at FROM payouts p JOIN orders o ON o.id=p.order_id ${w.sql} ORDER BY p.created_at DESC LIMIT ${pageSize} OFFSET ${offset}`, w.params);
-  return { page, pageSize, total, items: rows.map((r) => ({ id: r.id, orderId: r.order_id, orderTitle: r.title, milestoneId: r.milestone_id, kind: r.kind, amountKobo: r.amount_kobo, status: r.status, attempts: r.attempts, lastError: r.last_error, reference: r.provider_reference, updatedAt: r.updated_at.toISOString() })) };
+  const rows = await q<{ id: string; order_id: string; title: string; milestone_id: string | null; kind: string; amount_kobo: number; status: string; attempts: number; last_error: string | null; provider_reference: string | null; paga_reference_number: string | null; reversal_id: string | null; updated_at: Date }>(undefined,
+    `SELECT p.id, p.order_id, o.title, p.milestone_id, p.kind, p.amount_kobo, p.status, p.attempts,
+      p.last_error, p.provider_reference, p.paga_reference_number, p.reversal_id, p.updated_at
+     FROM payouts p JOIN orders o ON o.id=p.order_id ${w.sql} ORDER BY p.created_at DESC LIMIT ${pageSize} OFFSET ${offset}`, w.params);
+  return { page, pageSize, total, items: rows.map((r) => ({ id: r.id, orderId: r.order_id, orderTitle: r.title, milestoneId: r.milestone_id, kind: r.kind, amountKobo: r.amount_kobo, status: r.status, attempts: r.attempts, lastError: r.last_error, reference: r.provider_reference, pagaReference: r.paga_reference_number, reversalId: r.reversal_id, updatedAt: r.updated_at.toISOString() })) };
 }
 
 export async function retryPayout(admin: { id: string; label: string }, payoutId: string) {
   const status = await withTx(async (tx) => {
-    const p = await q1<{ status: string; attempts: number }>(tx, "SELECT status, attempts FROM payouts WHERE id=$1 FOR UPDATE", [payoutId]);
-    if (!p || p.status !== "failed") throw new AppError("INVALID_STATE", "Only a failed payout can be retried.");
-    await writeAudit(tx, { actorType: "admin", actorId: admin.id, actorLabel: admin.label, action: "payout.retry", targetType: "payout", targetId: payoutId, before: { status: "failed", attempts: p.attempts }, after: { status: "retrying" } });
+    const p = await q1<{
+      status: string;
+      attempts: number;
+      paga_reference_number: string | null;
+      paga_transaction_id: string | null;
+      reversal_id: string | null;
+      provider_reference: string | null;
+    }>(tx, "SELECT status, attempts, paga_reference_number, paga_transaction_id, reversal_id, provider_reference FROM payouts WHERE id=$1 FOR UPDATE", [payoutId]);
+    if (!p || (p.status !== "failed" && p.status !== "reversed")) {
+      throw new AppError("INVALID_STATE", "Only a failed or returned payout can be retried.");
+    }
+    if (p.status === "reversed") {
+      await q(tx, "UPDATE payouts SET status='failed', paga_transaction_id=NULL, reversal_id=NULL, provider_reference=NULL, updated_at=now() WHERE id=$1", [payoutId]);
+    }
+    await writeAudit(tx, { actorType: "admin", actorId: admin.id, actorLabel: admin.label, action: "payout.retry", targetType: "payout", targetId: payoutId,
+      before: { status: p.status, attempts: p.attempts, pagaReference: p.paga_reference_number, transactionId: p.paga_transaction_id, reversalId: p.reversal_id, providerReference: p.provider_reference },
+      after: { status: "retrying" } });
     return p.status;
   });
   void status;

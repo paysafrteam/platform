@@ -7,7 +7,7 @@ import { pagaProvider } from "@/server/payments/paga";
 /** Sandbox rail. Clearly fake account details; funding goes through the same recordFunding() Paga will call. */
 export const simulator: PaymentProvider = {
   name: "simulator",
-  async createCollectionAccount({ orderId, expiresAt }) {
+  async createCollectionAccount({ orderId, amountKobo, expiresAt }) {
     // Deterministic, unique-per-order fake NUBAN-style number (prefix 99 marks it as sandbox).
     const n = parseInt(createHash("sha256").update(orderId).digest("hex").slice(0, 12), 16) % 100_000_000;
     return {
@@ -15,6 +15,7 @@ export const simulator: PaymentProvider = {
       accountNumber: `99${n.toString().padStart(8, "0")}`,
       accountName: "PaySafr Sandbox Collection",
       expiresAt,
+      totalPaymentAmountKobo: amountKobo,
     };
   },
   async initiatePayout({ payoutId, accountNumber }) {
